@@ -4,7 +4,7 @@ import android.content.Context
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
+import retrofit2.converter.gson.GsonConverterFactory
 
 class SignalClient(private val context: Context, private val phoneNumber: String, private val password: String) {
 
@@ -15,7 +15,15 @@ class SignalClient(private val context: Context, private val phoneNumber: String
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
+        val userAgentInterceptor = okhttp3.Interceptor { chain ->
+            val originalRequest = chain.request()
+            val requestWithUserAgent = originalRequest.newBuilder()
+                .header("User-Agent", "Signal-Android/8.20.1 Android/29")
+                .build()
+            chain.proceed(requestWithUserAgent)
+        }
         val builder = OkHttpClient.Builder()
+            .addInterceptor(userAgentInterceptor)
             .addInterceptor(logging)
         ConscryptHelper.configureOkHttp(context, builder)
         builder.build()
@@ -23,9 +31,9 @@ class SignalClient(private val context: Context, private val phoneNumber: String
 
     val api: SignalApi by lazy {
         Retrofit.Builder()
-            .baseUrl("https://chat.signal.org")
+            .baseUrl("https://chat.signal.org/")
             .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(SignalApi::class.java)
     }

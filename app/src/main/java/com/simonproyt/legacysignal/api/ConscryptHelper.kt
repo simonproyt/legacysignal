@@ -111,4 +111,50 @@ object ConscryptHelper {
         
         builder.sslSocketFactory(sslContext.socketFactory, trustManager)
     }
+    
+    fun installGlobally(context: Context) {
+        val provider = Conscrypt.newProvider()
+        Security.insertProviderAt(provider, 1)
+
+        val cf = CertificateFactory.getInstance("X.509")
+        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
+        keyStore.load(null, null)
+
+        var certCount = 0
+        context.resources.openRawResource(R.raw.cacert).use { inputStream ->
+            val pemContent = inputStream.bufferedReader().use { it.readText() }
+            val certPattern = java.util.regex.Pattern.compile(
+                "-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----",
+                java.util.regex.Pattern.DOTALL
+            )
+            val matcher = certPattern.matcher(pemContent)
+            while (matcher.find()) {
+                val base64Cert = matcher.group(1).replace("\\s".toRegex(), "")
+                val certBytes = android.util.Base64.decode(base64Cert, android.util.Base64.DEFAULT)
+                val cert = cf.generateCertificate(java.io.ByteArrayInputStream(certBytes)) as X509Certificate
+                keyStore.setCertificateEntry("ca_$certCount", cert)
+                certCount++
+            }
+        }
+
+        val trustManager = object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> {
+                val certs = mutableListOf<X509Certificate>()
+                val aliases = keyStore.aliases()
+                while (aliases.hasMoreElements()) {
+                    val cert = keyStore.getCertificate(aliases.nextElement())
+                    if (cert is X509Certificate) certs.add(cert)
+                }
+                return certs.toTypedArray()
+            }
+        }
+
+        val sslContext = SSLContext.getInstance("TLS", provider)
+        sslContext.init(null, arrayOf(trustManager), null)
+        
+        SSLContext.setDefault(sslContext)
+        javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.socketFactory)
+    }
 }

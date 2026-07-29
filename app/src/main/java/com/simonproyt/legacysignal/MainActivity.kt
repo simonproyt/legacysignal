@@ -13,8 +13,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Dummy credentials for now
-        signalClient = SignalClient(this, "+15551234567", "dummy_password")
+        // Read credentials from CredentialsManager
+        val phone = CredentialsManager.getPhoneNumber(this) ?: ""
+        val pass = CredentialsManager.getPassword(this) ?: ""
+        signalClient = SignalClient(this, phone, pass)
 
         findViewById<Button>(R.id.btnConnect).setOnClickListener {
             signalClient.connect()

@@ -52,16 +52,17 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.logging.interceptor)
     implementation(libs.retrofit)
-    implementation(libs.converter.moshi)
-
-    // JSON
-    implementation(libs.moshi.kotlin)
-    ksp(libs.moshi.kotlin.codegen)
-    implementation(libs.kotlinx.serialization.core)
+    implementation("com.squareup.retrofit2:converter-gson:2.6.4")
+    implementation("com.google.code.gson:gson:2.8.9")
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
+
+    // GeckoView for backported modern WebView
+    implementation("org.mozilla.geckoview:geckoview:73.0.20200217142647") {
+        exclude(group = "com.android.support")
+    }
 
     // Tests
     testImplementation(libs.junit)
