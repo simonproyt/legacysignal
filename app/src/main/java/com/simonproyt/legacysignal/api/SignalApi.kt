@@ -9,6 +9,7 @@ import retrofit2.http.Header
 import retrofit2.http.Path
 
 data class RegistrationData(
+    val sessionId: String?,
     val signalingKey: String,
     val supportsSms: Boolean,
     val fetchesMessages: Boolean,
@@ -48,7 +49,7 @@ interface SignalApi {
     @PUT("/v1/accounts/attributes")
     fun updateAccountAttributes(
         @Header("Authorization") authHeader: String,
-        @Body attributes: Map<String, String>
+        @Body attributes: RegistrationData
     ): Call<Void>
 
     @GET("/v1/devices")

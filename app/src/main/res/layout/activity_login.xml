@@ -1,87 +1,188 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<ViewFlipper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/viewFlipper"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:background="#F2F4F8">
+    android:background="#FFFFFF">
 
+    <!-- Step 1: Phone Number Entry -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="32dp"
-        android:gravity="center">
-
-        <ImageView
-            android:layout_width="100dp"
-            android:layout_height="100dp"
-            android:src="@mipmap/ic_launcher"
-            android:layout_marginBottom="24dp"
-            android:contentDescription="Logo" />
+        android:padding="24dp">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Legacy Signal"
-            android:textSize="28sp"
+            android:text="Enter your phone number to\nget started"
+            android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="#1F2937"
+            android:textColor="#000000"
             android:gravity="center"
-            android:layout_marginBottom="8dp"/>
-            
+            android:layout_marginTop="48dp"
+            android:layout_marginBottom="16dp"/>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Enter your phone number to get started"
+            android:text="You will receive a verification code. Carrier\nrates may apply."
             android:textSize="14sp"
-            android:textColor="#6B7280"
+            android:textColor="#555555"
             android:gravity="center"
             android:layout_marginBottom="32dp"/>
 
-        <EditText
-            android:id="@+id/etPhoneNumber"
+        <!-- Country Selector (Visual Mockup) -->
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="#FFFFFF"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:hint="Phone Number (e.g. +1555...)"
-            android:inputType="phone"
-            android:textColor="#1F2937"
-            android:layout_marginBottom="16dp"/>
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:background="@android:drawable/editbox_background_normal"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp">
+            
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Country Code"
+                android:textColor="#000000"
+                android:textSize="16sp"/>
+                
+            <ImageView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:src="@android:drawable/arrow_down_float"/>
+        </LinearLayout>
+
+        <!-- Phone Number Input -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <EditText
+                android:layout_width="80dp"
+                android:layout_height="56dp"
+                android:background="@android:drawable/editbox_background_normal"
+                android:padding="12dp"
+                android:text="+"
+                android:inputType="phone"
+                android:textColor="#000000"
+                android:textSize="16sp"
+                android:layout_marginEnd="8dp"/>
+
+            <EditText
+                android:id="@+id/etPhoneNumber"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:layout_weight="1"
+                android:background="@android:drawable/editbox_background_normal"
+                android:padding="12dp"
+                android:hint="Phone number"
+                android:inputType="phone"
+                android:textColor="#000000"
+                android:textSize="16sp"/>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
 
         <Button
             android:id="@+id/btnRequestSms"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:background="#3B82F6"
+            android:background="#2C6BED"
             android:textColor="#FFFFFF"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:text="Request SMS Code"
-            android:layout_marginBottom="32dp"/>
+            android:text="NEXT"
+            android:layout_marginBottom="24dp"/>
+    </LinearLayout>
 
-        <EditText
-            android:id="@+id/etPassword"
+    <!-- Step 2: Verification Code -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
             android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:background="#FFFFFF"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:hint="SMS Verification Code"
-            android:inputType="number"
-            android:textColor="#1F2937"
-            android:layout_marginBottom="16dp"/>
+            android:layout_height="wrap_content"
+            android:text="Verification Code"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:gravity="center"
+            android:layout_marginTop="48dp"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/tvCodeSentTo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Enter the code we sent to"
+            android:textSize="14sp"
+            android:textColor="#555555"
+            android:gravity="center"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Wrong number?"
+            android:textSize="14sp"
+            android:textColor="#2C6BED"
+            android:gravity="center"
+            android:layout_marginBottom="48dp"/>
+
+        <!-- 6 Digit Input -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <EditText
+                android:id="@+id/etPassword"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="200dp"
+                android:background="@null"
+                android:gravity="center"
+                android:hint="- - -   - - -"
+                android:letterSpacing="0.4"
+                android:inputType="numberPassword"
+                android:textColor="#000000"
+                android:textSize="32sp" />
+                
+        </LinearLayout>
+        
+        <View
+            android:layout_width="200dp"
+            android:layout_height="2dp"
+            android:layout_gravity="center_horizontal"
+            android:background="#CCCCCC"/>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"/>
 
         <Button
             android:id="@+id/btnLogin"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:background="#10B981"
+            android:background="#2C6BED"
             android:textColor="#FFFFFF"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:text="Verify and Register" />
+            android:text="VERIFY"
+            android:layout_marginBottom="24dp"/>
 
     </LinearLayout>
-</ScrollView>
+
+</ViewFlipper>

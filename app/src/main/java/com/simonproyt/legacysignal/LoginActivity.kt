@@ -23,7 +23,7 @@ class LoginActivity : AppCompatActivity() {
     private val signalClient: SignalClient by lazy {
         SignalClient(this, "", "")
     }
-
+                                                                                                    
     companion object {
         const val CAPTCHA_REQUEST_CODE = 1001
     }
@@ -41,10 +41,12 @@ class LoginActivity : AppCompatActivity() {
         
         setContentView(R.layout.activity_login)
 
+        val viewFlipper = findViewById<android.widget.ViewFlipper>(R.id.viewFlipper)
         val etPhoneNumber = findViewById<EditText>(R.id.etPhoneNumber)
-        val etPassword = findViewById<EditText>(R.id.etPassword) // this is now the SMS code input
+        val etPassword = findViewById<EditText>(R.id.etPassword)
         val btnRequestSms = findViewById<Button>(R.id.btnRequestSms)
         val btnLogin = findViewById<Button>(R.id.btnLogin)
+        val tvCodeSentTo = findViewById<android.widget.TextView>(R.id.tvCodeSentTo)
         
         btnRequestSms.setOnClickListener {
             val phone = etPhoneNumber.text.toString().trim()
@@ -59,7 +61,7 @@ class LoginActivity : AppCompatActivity() {
                     if (response.isSuccessful && response.body() != null) {
                         currentSessionId = response.body()!!.id
                         Toast.makeText(this@LoginActivity, "Session created, requesting SMS...", Toast.LENGTH_SHORT).show()
-                        requestSms()
+                        requestSms(phone, viewFlipper, tvCodeSentTo)
                     } else {
                         Toast.makeText(this@LoginActivity, "Session error: ${response.code()}", Toast.LENGTH_SHORT).show()
                         Log.e("LoginActivity", "Session request failed: ${response.code()} ${response.message()}")
@@ -84,11 +86,34 @@ class LoginActivity : AppCompatActivity() {
                 override fun onResponse(call: Call<Void>, response: Response<Void>) {
                     if (response.isSuccessful) {
                         val generatedPassword = UUID.randomUUID().toString()
-                        CredentialsManager.saveCredentials(this@LoginActivity, phone, generatedPassword)
+                        val basicAuth = okhttp3.Credentials.basic(phone, generatedPassword)
+                        val regData = com.simonproyt.legacysignal.api.RegistrationData(
+                            sessionId = currentSessionId,
+                            signalingKey = UUID.randomUUID().toString().replace("-", ""),
+                            supportsSms = false,
+                            fetchesMessages = true,
+                            registrationId = (Math.random() * 16384).toInt(),
+                            name = ""
+                        )
                         
-                        Toast.makeText(this@LoginActivity, "Registered successfully!", Toast.LENGTH_LONG).show()
-                        startActivity(Intent(this@LoginActivity, MainActivity::class.java))
-                        finish()
+                        Toast.makeText(this@LoginActivity, "Setting up account...", Toast.LENGTH_SHORT).show()
+                        signalClient.api.updateAccountAttributes(basicAuth, regData).enqueue(object : Callback<Void> {
+                            override fun onResponse(call: Call<Void>, response2: Response<Void>) {
+                                if (response2.isSuccessful) {
+                                    CredentialsManager.saveCredentials(this@LoginActivity, phone, generatedPassword)
+                                    
+                                    Toast.makeText(this@LoginActivity, "Registered successfully!", Toast.LENGTH_LONG).show()
+                                    startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                                    finish()
+                                } else {
+                                    Toast.makeText(this@LoginActivity, "Account setup failed: ${response2.code()}", Toast.LENGTH_SHORT).show()
+                                    Log.e("LoginActivity", "Account setup failed: ${response2.code()} ${response2.message()}")
+                                }
+                            }
+                            override fun onFailure(call: Call<Void>, t: Throwable) {
+                                Toast.makeText(this@LoginActivity, "Network error during setup", Toast.LENGTH_SHORT).show()
+                            }
+                        })
                     } else {
                         Toast.makeText(this@LoginActivity, "Verification failed: ${response.code()}", Toast.LENGTH_SHORT).show()
                         Log.e("LoginActivity", "Verify failed: ${response.code()} ${response.message()}")
@@ -101,11 +126,15 @@ class LoginActivity : AppCompatActivity() {
         }
     }
     
-    private fun requestSms() {
+    private fun requestSms(phone: String, viewFlipper: android.widget.ViewFlipper? = null, tvCodeSentTo: android.widget.TextView? = null) {
         signalClient.api.requestSmsCode(currentSessionId!!, CodeRequest()).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response2: Response<Void>) {
                 if (response2.isSuccessful) {
                     Toast.makeText(this@LoginActivity, "SMS requested!", Toast.LENGTH_SHORT).show()
+                    if (viewFlipper != null && tvCodeSentTo != null) {
+                        tvCodeSentTo.text = "Enter the code we sent to $phone"
+                        viewFlipper.displayedChild = 1
+                    }
                 } else if (response2.code() == 409) {
                     // CAPTCHA or missing info required
                     Toast.makeText(this@LoginActivity, "Captcha required...", Toast.LENGTH_SHORT).show()
@@ -132,7 +161,10 @@ class LoginActivity : AppCompatActivity() {
                 signalClient.api.patchSession(currentSessionId!!, mapOf("captcha" to token)).enqueue(object : Callback<SessionCreateResponse> {
                     override fun onResponse(call: Call<SessionCreateResponse>, response: Response<SessionCreateResponse>) {
                         if (response.isSuccessful) {
-                            requestSms()
+                            val viewFlipper = findViewById<android.widget.ViewFlipper>(R.id.viewFlipper)
+                            val tvCodeSentTo = findViewById<android.widget.TextView>(R.id.tvCodeSentTo)
+                            val etPhoneNumber = findViewById<android.widget.EditText>(R.id.etPhoneNumber)
+                            requestSms(etPhoneNumber.text.toString().trim(), viewFlipper, tvCodeSentTo)
                         } else {
                             Toast.makeText(this@LoginActivity, "Captcha rejected: ${response.code()}", Toast.LENGTH_SHORT).show()
                         }

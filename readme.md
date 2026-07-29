@@ -9,6 +9,8 @@
 # Bugs
 
 - becuase the app isnt implamented yet there is nothing to be bugged out (yet)
+- you cant finish registration with becuase you will get a 401 error sometimes (working on it)
+- you cant chose the country code in the country code picker somewhy (also working on it)
 
 # Workarounds that i used to make this work on old android
 
