@@ -11,8 +11,8 @@
 - becuase the app isnt implamented yet there is nothing to be bugged out (yet)
 - you cant finish registration with becuase you will get a 401 error sometimes (working on it)
 - you cant chose the country code in the country code picker somewhy (removed the dropdown becuase it was kinda useless we can consider that fixed for now)
-- registration is kinda broken now
-- the geckoview captcha thingy is broken on 4.3 but works on 4.4 so idk why it does that but i need to look into it
+- registration is kinda broken now (fixed now by the backporting of libsignal)
+- the geckoview captcha thingy is broken on 4.3 but works on 4.4 so idk why it does that but i need to look into it (fixed by using textureview instead of surfaceview)
 
 # Workarounds that i used to make this work on old android
 
@@ -29,4 +29,4 @@ Use the releases tab and downlaoad it or build it yourself from source but first
 # Acknowledgments:
 
 - The signal project for the actual signal protocol and the libsignal crypto lib so i didnt need to write a crypto lib from scratch just have to backort and change a few stuff
-- mozilla for making a viable chromium webview alternative
+- mozilla for making a viable chromium webview alternative that works on legacy stuff

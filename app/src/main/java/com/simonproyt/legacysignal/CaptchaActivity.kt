@@ -65,6 +65,7 @@ class CaptchaActivity : Activity() {
         }
 
         geckoSession?.open(runtime)
+        geckoView.setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
         geckoView.setSession(geckoSession!!)
 
         geckoSession?.loadUri("https://signalcaptchas.org/registration/generate.html")
