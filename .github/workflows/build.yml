@@ -49,6 +49,10 @@ jobs:
           sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.2.16/src/util_libc.rs
           sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.3.3/src/backends/linux_android_with_fallback.rs
 
+      - name: Patch libsignal-client NDK version
+        run: |
+          sed -i "s/ndkVersion '30.0.15729638'/ndkVersion '27.1.12297006'/g" libsignal-client/java/android/build.gradle
+
       - name: Build libsignal-client JAR and AAR
         run: |
           export RUSTFLAGS="-C link-arg=-Wl,--hash-style=both"
