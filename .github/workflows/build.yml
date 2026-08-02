@@ -23,12 +23,15 @@ jobs:
           cache: gradle
 
       - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1.5.0
+        uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r30-rc2
+          ndk-version: r27b
           add-to-path: true
           link-to-sdk: true
+      - name: Patch libsignal-client NDK version
+        run: |
+          sed -i "s/ndkVersion '30.0.15729638'/ndkVersion '27.1.12297006'/g" libsignal-client/java/android/build.gradle
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
