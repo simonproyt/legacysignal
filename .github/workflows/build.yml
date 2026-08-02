@@ -35,8 +35,6 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: armv7-linux-androideabi,i686-linux-android
 
       - name: Cache Cargo registry
         uses: actions/cache@v3
@@ -47,9 +45,10 @@ jobs:
             libsignal-client/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Patch getrandom crates
+      - name: Patch getrandom crates and install targets
         run: |
           cd libsignal-client
+          rustup target add armv7-linux-androideabi i686-linux-android aarch64-linux-android x86_64-linux-android
           cargo fetch
           REGISTRY_DIR=$(ls -d ~/.cargo/registry/src/index.crates.io-* | head -n 1)
           sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.2.16/src/util_libc.rs
