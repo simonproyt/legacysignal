@@ -41,6 +41,14 @@ jobs:
           libsignal-client/target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+    - name: Patch getrandom crates
+      run: |
+        cd libsignal-client
+        cargo fetch
+        REGISTRY_DIR=$(ls -d ~/.cargo/registry/src/index.crates.io-* | head -n 1)
+        sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.2.16/src/util_libc.rs
+        sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.3.3/src/backends/linux_android_with_fallback.rs
+
     - name: Build libsignal-client JAR and AAR
       run: |
         export RUSTFLAGS="-C link-arg=-Wl,--hash-style=both"
@@ -49,6 +57,7 @@ jobs:
 
     - name: Copy libs to App
       run: |
+        mkdir -p app/libs
         cp libsignal-client/java/android/build/outputs/aar/libsignal-android-release.aar app/libs/libsignal-android-0.86.5-compat.aar
         cp libsignal-client/java/client/build/libs/libsignal-client-0.86.5.jar app/libs/
 

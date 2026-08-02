@@ -27,34 +27,12 @@ pub unsafe extern "C" fn Java_org_signal_libsignal_internal_Native_initializeLib
     mut env: JNIEnv<'local>,
     class: JClass<'local>,
 ) {
-    unsafe extern "C" {
-        pub fn __android_log_print(prio: std::os::raw::c_int, tag: *const std::os::raw::c_char, fmt: *const std::os::raw::c_char, ...) -> std::os::raw::c_int;
-    }
-    
-    unsafe {
-        let tag = b"SignalJni\0".as_ptr() as *const std::ffi::c_char;
-        let msg1 = b"Enter initializeLibrary\0".as_ptr() as *const std::ffi::c_char;
-        __android_log_print(3, tag, msg1);
-    }
-    
     run_ffi_safe(&mut env, |env| {
         #[cfg(target_os = "android")]
         save_class_loader(env, &class)?;
 
-        unsafe {
-            let tag = b"SignalJni\0".as_ptr() as *const std::ffi::c_char;
-            let msg2 = b"After save_class_loader\0".as_ptr() as *const std::ffi::c_char;
-            __android_log_print(3, tag, msg2);
-        }
-
         #[cfg(target_os = "android")]
         set_up_rustls_platform_verifier(env, class)?;
-
-        unsafe {
-            let tag = b"SignalJni\0".as_ptr() as *const std::ffi::c_char;
-            let msg3 = b"After rustls init\0".as_ptr() as *const std::ffi::c_char;
-            __android_log_print(3, tag, msg3);
-        }
 
         // Silence the unused variable warning on non-Android.
         _ = class;

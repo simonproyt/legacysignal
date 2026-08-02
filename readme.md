@@ -10,7 +10,8 @@
 
 - becuase the app isnt implamented yet there is nothing to be bugged out (yet)
 - you cant finish registration with becuase you will get a 401 error sometimes (working on it)
-- you cant chose the country code in the country code picker somewhy (also working on it)
+- you cant chose the country code in the country code picker somewhy (removed the dropdown becuase it was kinda useless we can consider that fixed for now)
+- registration is kinda broken now
 
 # Workarounds that i used to make this work on old android
 
@@ -18,7 +19,13 @@
 - replacing the built in crypto libaries for the api stuff becuase it cant handle tls1.3 like the built in webview and it needed to go because of that
 - replacing the old android crytofactory with a custom one cause the old built in one couldnt handle injecting modern certs into it
 - having to backport java features/classes to the app becuase if they didnt exsist in our version the dalvikvm would just crash because it cant handle it like modern android i guess
+- having to fork libsignal to backport symbols and replace new android apis with their old android 4.x ones to make it not crash
 
 # How to get yourself an apk:
 
-So curently i dont have a github actions ci pipline set up (yet) becuase its stil not in the user usable phase you need to clone yourself the repo and built it yourself in android studio but in the future im planning on setting up a build pipeline so even non dev ppl can get it easily
+Use the releases tab and downlaoad it or build it yourself from source but first you need to patch some dependencies for libsignal but all of the patches that i used are in ci pipleine
+
+# Acknowledgments:
+
+- The signal project for the actual signal protocol and the libsignal crypto lib so i didnt need to write a crypto lib from scratch just have to backort and change a few stuff
+- mozilla for making a viable chromium webview alternative

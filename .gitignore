@@ -14,4 +14,13 @@
 .cxx
 local.properties
 /.idea/
-/.kotlin/
+/.kotlin/libsignal-client/target
+app/build
+app/libs/*.aar
+libsignal-client/target/
+app/libs/*.jar
+libsignal-client/java/client/build/
+libsignal-client/java/android/build/
+libsignal-client/java/build/
+libsignal-client/java/.gradle/
+scratch/

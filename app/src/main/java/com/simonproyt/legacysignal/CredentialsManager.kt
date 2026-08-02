@@ -23,18 +23,7 @@ object CredentialsManager {
         keyStore.load(null)
         if (!keyStore.containsAlias(ALIAS)) {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                val keyGenerator = java.security.KeyPairGenerator.getInstance(
-                    android.security.keystore.KeyProperties.KEY_ALGORITHM_RSA,
-                    "AndroidKeyStore"
-                )
-                val spec = android.security.keystore.KeyGenParameterSpec.Builder(
-                    ALIAS,
-                    android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
-                )
-                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1)
-                .build()
-                keyGenerator.initialize(spec)
-                keyGenerator.generateKeyPair()
+                Api23Impl.generateKey(ALIAS)
             } else {
                 @Suppress("DEPRECATION")
                 val start = java.util.Calendar.getInstance()
@@ -88,6 +77,15 @@ object CredentialsManager {
             .apply()
     }
 
+    fun saveSignalKeys(context: Context, aciIdentityStr: String, pniIdentityStr: String, aciKyberStr: String, pniKyberStr: String) {
+        getPrefs(context).edit()
+            .putString("ACI_IDENTITY", encrypt(context, aciIdentityStr))
+            .putString("PNI_IDENTITY", encrypt(context, pniIdentityStr))
+            .putString("ACI_KYBER", encrypt(context, aciKyberStr))
+            .putString("PNI_KYBER", encrypt(context, pniKyberStr))
+            .apply()
+    }
+
     fun getPhoneNumber(context: Context): String? {
         val enc = getPrefs(context).getString(KEY_PHONE_NUMBER, null) ?: return null
         return try { decrypt(context, enc) } catch (e: Exception) { null }
@@ -105,6 +103,23 @@ object CredentialsManager {
 
     fun clearCredentials(context: Context) {
         getPrefs(context).edit().clear().apply()
-    }
 }
 
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.M)
+    private object Api23Impl {
+        fun generateKey(alias: String) {
+            val keyGenerator = java.security.KeyPairGenerator.getInstance(
+                android.security.keystore.KeyProperties.KEY_ALGORITHM_RSA,
+                "AndroidKeyStore"
+            )
+            val spec = android.security.keystore.KeyGenParameterSpec.Builder(
+                alias,
+                android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT
+            )
+            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_RSA_PKCS1)
+            .build()
+            keyGenerator.initialize(spec)
+            keyGenerator.generateKeyPair()
+        }
+    }
+}

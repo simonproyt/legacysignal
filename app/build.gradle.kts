@@ -45,7 +45,8 @@ dependencies {
     implementation(libs.material)
 
     // Signal
-    implementation(libs.libsignal.android)
+    implementation(files("libs/libsignal-android-0.86.5-compat.aar"))
+    implementation(files("libs/libsignal-client-0.86.5.jar"))
     implementation(libs.conscrypt.android)
 
     // Legacy networking
@@ -68,4 +69,5 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation("androidx.tracing:tracing:1.0.0")
 }

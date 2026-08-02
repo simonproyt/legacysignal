@@ -8,18 +8,42 @@ import retrofit2.http.PUT
 import retrofit2.http.Header
 import retrofit2.http.Path
 
-data class RegistrationData(
-    val sessionId: String?,
-    val signalingKey: String,
-    val supportsSms: Boolean,
+data class AccountAttributes(
     val fetchesMessages: Boolean,
     val registrationId: Int,
-    val name: String
+    val name: String,
+    val capabilities: List<String>
+)
+
+data class ECSignedPreKey(
+    val keyId: Int,
+    val publicKey: String,
+    val signature: String
+)
+
+data class KEMSignedPreKey(
+    val keyId: Int,
+    val publicKey: String,
+    val signature: String
+)
+
+data class RegistrationRequest(
+    val sessionId: String,
+    val skipDeviceTransfer: Boolean,
+    val aciIdentityKey: String,
+    val pniIdentityKey: String,
+    val accountAttributes: AccountAttributes,
+    val aciSignedPreKey: ECSignedPreKey,
+    val pniSignedPreKey: ECSignedPreKey,
+    val aciPqLastResortPreKey: KEMSignedPreKey,
+    val pniPqLastResortPreKey: KEMSignedPreKey
 )
 
 data class SessionCreateRequest(val number: String)
 data class SessionCreateResponse(val id: String)
 data class CodeRequest(val transport: String = "sms", val client: String = "android")
+
+data class VerifyResponse(val verified: Boolean)
 
 interface SignalApi {
     
@@ -44,12 +68,12 @@ interface SignalApi {
     fun verifySmsCode(
         @Path("sessionId") sessionId: String,
         @Body request: Map<String, String> // {"verificationCode": code}
-    ): Call<Void>
+    ): Call<VerifyResponse>
 
-    @PUT("/v1/accounts/attributes")
-    fun updateAccountAttributes(
+    @POST("/v1/registration")
+    fun registerAccount(
         @Header("Authorization") authHeader: String,
-        @Body attributes: RegistrationData
+        @Body request: RegistrationRequest
     ): Call<Void>
 
     @GET("/v1/devices")
