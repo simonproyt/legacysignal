@@ -12,6 +12,7 @@
 - you cant finish registration with becuase you will get a 401 error sometimes (working on it)
 - you cant chose the country code in the country code picker somewhy (removed the dropdown becuase it was kinda useless we can consider that fixed for now)
 - registration is kinda broken now
+- the geckoview captcha thingy is broken on 4.3 but works on 4.4 so idk why it does that but i need to look into it
 
 # Workarounds that i used to make this work on old android
 

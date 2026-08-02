@@ -11,8 +11,10 @@ import retrofit2.http.Path
 data class AccountAttributes(
     val fetchesMessages: Boolean,
     val registrationId: Int,
+    val pniRegistrationId: Int,
     val name: String,
-    val capabilities: List<String>
+    val capabilities: Map<String, Boolean>,
+    val unrestrictedUnidentifiedAccess: Boolean
 )
 
 data class ECSignedPreKey(
@@ -45,6 +47,12 @@ data class CodeRequest(val transport: String = "sms", val client: String = "andr
 
 data class VerifyResponse(val verified: Boolean)
 
+data class AccountCreationResponse(
+    val uuid: String,
+    val number: String,
+    val pni: String
+)
+
 interface SignalApi {
     
     @POST("/v1/verification/session")
@@ -74,7 +82,7 @@ interface SignalApi {
     fun registerAccount(
         @Header("Authorization") authHeader: String,
         @Body request: RegistrationRequest
-    ): Call<Void>
+    ): Call<AccountCreationResponse>
 
     @GET("/v1/devices")
     fun getDevices(

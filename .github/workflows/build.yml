@@ -2,70 +2,70 @@ name: Android Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
+      - name: set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
 
-    - name: Setup Android NDK
-      uses: nttld/setup-ndk@v1
-      id: setup-ndk
-      with:
-        ndk-version: r27b
-        add-to-path: true
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27b
+          add-to-path: true
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@nightly
 
-    - name: Cache Cargo registry
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          libsignal-client/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            libsignal-client/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Patch getrandom crates
-      run: |
-        cd libsignal-client
-        cargo fetch
-        REGISTRY_DIR=$(ls -d ~/.cargo/registry/src/index.crates.io-* | head -n 1)
-        sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.2.16/src/util_libc.rs
-        sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.3.3/src/backends/linux_android_with_fallback.rs
+      - name: Patch getrandom crates
+        run: |
+          cd libsignal-client
+          cargo fetch
+          REGISTRY_DIR=$(ls -d ~/.cargo/registry/src/index.crates.io-* | head -n 1)
+          sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.2.16/src/util_libc.rs
+          sed -i 's/libc::dlsym(libc::RTLD_DEFAULT, name_ptr)/let handle = libc::dlopen(b"libc.so\\0".as_ptr() as *const _, libc::RTLD_NOW); if handle.is_null() { core::ptr::null_mut() } else { libc::dlsym(handle, name_ptr) }/g' $REGISTRY_DIR/getrandom-0.3.3/src/backends/linux_android_with_fallback.rs
 
-    - name: Build libsignal-client JAR and AAR
-      run: |
-        export RUSTFLAGS="-C link-arg=-Wl,--hash-style=both"
-        cd libsignal-client/java
-        ./gradlew :client:assemble assembleRelease -PandroidArchs=armv7,x86 --no-daemon
+      - name: Build libsignal-client JAR and AAR
+        run: |
+          export RUSTFLAGS="-C link-arg=-Wl,--hash-style=both"
+          cd libsignal-client/java
+          ./gradlew :client:assemble assembleRelease -PandroidArchs=armv7,x86 --no-daemon
 
-    - name: Copy libs to App
-      run: |
-        mkdir -p app/libs
-        cp libsignal-client/java/android/build/outputs/aar/libsignal-android-release.aar app/libs/libsignal-android-0.86.5-compat.aar
-        cp libsignal-client/java/client/build/libs/libsignal-client-0.86.5.jar app/libs/
+      - name: Copy libs to App
+        run: |
+          mkdir -p app/libs
+          cp libsignal-client/java/android/build/outputs/aar/libsignal-android-release.aar app/libs/libsignal-android-0.86.5-compat.aar
+          cp libsignal-client/java/client/build/libs/libsignal-client-0.86.5.jar app/libs/
 
-    - name: Build debug APK
-      run: ./gradlew assembleDebug --no-daemon
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v3
-      with:
-        name: legacysignal-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacysignal-debug
+          path: app/build/outputs/apk/debug/app-debug.apk

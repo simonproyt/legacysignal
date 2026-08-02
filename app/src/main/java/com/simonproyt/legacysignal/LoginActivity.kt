@@ -112,6 +112,7 @@ class LoginActivity : AppCompatActivity() {
                             val pniKyberSignature = pniIdentityKeyPair.privateKey.calculateSignature(pniKyberKeyPair.publicKey.serialize())
 
                             val regId = (Math.random() * 16384).toInt()
+                            val pniRegId = (Math.random() * 16384).toInt()
                             val regData = com.simonproyt.legacysignal.api.RegistrationRequest(
                                 sessionId = currentSessionId!!,
                                 skipDeviceTransfer = true,
@@ -120,8 +121,10 @@ class LoginActivity : AppCompatActivity() {
                                 accountAttributes = com.simonproyt.legacysignal.api.AccountAttributes(
                                     fetchesMessages = true,
                                     registrationId = regId,
+                                    pniRegistrationId = pniRegId,
                                     name = "",
-                                    capabilities = listOf("spqr")
+                                    capabilities = mapOf("uuid" to true, "gv2" to true, "storage" to true, "pni" to true, "spqr" to true),
+                                    unrestrictedUnidentifiedAccess = true
                                 ),
                                 aciSignedPreKey = com.simonproyt.legacysignal.api.ECSignedPreKey(
                                     keyId = 1,
@@ -146,10 +149,11 @@ class LoginActivity : AppCompatActivity() {
                             )
                             
                             Toast.makeText(this@LoginActivity, "Setting up account...", Toast.LENGTH_SHORT).show()
-                            signalClient.api.registerAccount(basicAuth, regData).enqueue(object : Callback<Void> {
-                                override fun onResponse(call: Call<Void>, response2: Response<Void>) {
+                            signalClient.api.registerAccount(basicAuth, regData).enqueue(object : Callback<com.simonproyt.legacysignal.api.AccountCreationResponse> {
+                                override fun onResponse(call: Call<com.simonproyt.legacysignal.api.AccountCreationResponse>, response2: Response<com.simonproyt.legacysignal.api.AccountCreationResponse>) {
                                     if (response2.isSuccessful) {
-                                        CredentialsManager.saveCredentials(this@LoginActivity, phone, generatedPassword)
+                                        val uuid = response2.body()?.uuid ?: phone
+                                        CredentialsManager.saveCredentials(this@LoginActivity, uuid, generatedPassword)
                                         val aciKyberRecord = org.signal.libsignal.protocol.state.KyberPreKeyRecord(1, System.currentTimeMillis(), aciKyberKeyPair, aciKyberSignature)
                                         val pniKyberRecord = org.signal.libsignal.protocol.state.KyberPreKeyRecord(1, System.currentTimeMillis(), pniKyberKeyPair, pniKyberSignature)
                                         CredentialsManager.saveSignalKeys(this@LoginActivity, 
@@ -167,7 +171,7 @@ class LoginActivity : AppCompatActivity() {
                                         Log.e("LoginActivity", "Account setup failed: ${response2.code()} ${response2.message()}")
                                     }
                                 }
-                                override fun onFailure(call: Call<Void>, t: Throwable) {
+                                override fun onFailure(call: Call<com.simonproyt.legacysignal.api.AccountCreationResponse>, t: Throwable) {
                                     btnLogin.isEnabled = true
                                     Toast.makeText(this@LoginActivity, "Network error during setup", Toast.LENGTH_SHORT).show()
                                 }

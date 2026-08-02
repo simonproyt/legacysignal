@@ -79,10 +79,10 @@ object CredentialsManager {
 
     fun saveSignalKeys(context: Context, aciIdentityStr: String, pniIdentityStr: String, aciKyberStr: String, pniKyberStr: String) {
         getPrefs(context).edit()
-            .putString("ACI_IDENTITY", encrypt(context, aciIdentityStr))
-            .putString("PNI_IDENTITY", encrypt(context, pniIdentityStr))
-            .putString("ACI_KYBER", encrypt(context, aciKyberStr))
-            .putString("PNI_KYBER", encrypt(context, pniKyberStr))
+            .putString("ACI_IDENTITY", aciIdentityStr)
+            .putString("PNI_IDENTITY", pniIdentityStr)
+            .putString("ACI_KYBER", aciKyberStr)
+            .putString("PNI_KYBER", pniKyberStr)
             .apply()
     }
 
