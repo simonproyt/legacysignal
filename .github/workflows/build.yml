@@ -15,6 +15,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install OS dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev cmake make protobuf-compiler
+
       - name: set up JDK 17
         uses: actions/setup-java@v3
         with:
@@ -37,7 +40,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
 
       - name: Cache Cargo registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
