@@ -26,7 +26,7 @@ jobs:
         uses: nttld/setup-ndk@v1.5.0
         id: setup-ndk
         with:
-          ndk-version: r30
+          ndk-version: r30-rc2
           add-to-path: true
           link-to-sdk: true
 
