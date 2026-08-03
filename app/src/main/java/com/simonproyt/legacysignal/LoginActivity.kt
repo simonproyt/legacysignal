@@ -40,6 +40,10 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
+        if (savedInstanceState != null) {
+            currentSessionId = savedInstanceState.getString("currentSessionId")
+        }
+
         setContentView(R.layout.activity_login)
         val viewFlipper = findViewById<android.widget.ViewFlipper>(R.id.viewFlipper)
         val etPhoneNumber = findViewById<EditText>(R.id.etPhoneNumber)
@@ -193,6 +197,11 @@ class LoginActivity : AppCompatActivity() {
                 }
             })
         }
+    }
+    
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("currentSessionId", currentSessionId)
     }
     
     private fun requestSms(phone: String, viewFlipper: android.widget.ViewFlipper? = null, tvCodeSentTo: android.widget.TextView? = null) {
