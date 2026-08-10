@@ -7,14 +7,40 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Header
 import retrofit2.http.Path
+import retrofit2.http.Query
+
+data class Capabilities(
+    val storage: Boolean,
+    val versionedExpirationTimer: Boolean,
+    val attachmentBackfill: Boolean,
+    val spqr: Boolean,
+    val usernameChangeSyncMessage: Boolean
+)
 
 data class AccountAttributes(
+    val voice: Boolean,
+    val video: Boolean,
     val fetchesMessages: Boolean,
     val registrationId: Int,
     val pniRegistrationId: Int,
+    val name: String?,
+    val capabilities: Capabilities,
+    val unidentifiedAccessKey: String?,
+    val unrestrictedUnidentifiedAccess: Boolean,
+    val discoverableByPhoneNumber: Boolean
+)
+
+data class SignalServiceProfileWrite(
+    val version: String,
     val name: String,
-    val capabilities: Map<String, Boolean>,
-    val unrestrictedUnidentifiedAccess: Boolean
+    val about: String,
+    val aboutEmoji: String,
+    val paymentAddress: String?,
+    val phoneNumberSharing: String,
+    val avatar: Boolean,
+    val sameAvatar: Boolean,
+    val commitment: String,
+    val badgeIds: List<String>
 )
 
 data class ECSignedPreKey(
@@ -39,6 +65,17 @@ data class RegistrationRequest(
     val pniSignedPreKey: ECSignedPreKey,
     val aciPqLastResortPreKey: KEMSignedPreKey,
     val pniPqLastResortPreKey: KEMSignedPreKey
+)
+
+data class PreKey(
+    val keyId: Int,
+    val publicKey: String
+)
+
+data class PreKeyUploadRequest(
+    val signedPreKey: ECSignedPreKey,
+    val preKeys: List<PreKey>,
+    val pqLastResortPreKey: KEMSignedPreKey? = null
 )
 
 data class SessionCreateRequest(val number: String)
@@ -88,4 +125,17 @@ interface SignalApi {
     fun getDevices(
         @Header("Authorization") authHeader: String
     ): Call<Map<String, Any>>
+
+    @PUT("/v2/keys")
+    fun uploadPreKeys(
+        @Header("Authorization") auth: String,
+        @Query("identity") identity: String, // "aci" or "pni"
+        @Body request: PreKeyUploadRequest
+    ): Call<Void>
+    
+    @PUT("/v1/profile")
+    fun uploadProfile(
+        @Header("Authorization") auth: String,
+        @Body profile: SignalServiceProfileWrite
+    ): Call<Void>
 }

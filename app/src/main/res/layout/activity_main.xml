@@ -1,21 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
-    android:orientation="vertical">
+    android:padding="16dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Legacy Signal Client"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvMessages"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/layoutInput"
         android:layout_marginBottom="16dp"
-        android:textSize="24sp" />
+        android:scrollbars="vertical" />
 
-    <Button
-        android:id="@+id/btnConnect"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/layoutInput"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Connect to Signal" />
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal">
 
-</LinearLayout>
+        <EditText
+            android:id="@+id/etMessage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Type a message..."
+            android:inputType="textShortMessage" />
+
+        <Button
+            android:id="@+id/btnSend"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Send" />
+    </LinearLayout>
+
+</RelativeLayout>

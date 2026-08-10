@@ -9,10 +9,7 @@
 # Bugs
 
 - becuase the app isnt implamented yet there is nothing to be bugged out (yet)
-- you cant finish registration with becuase you will get a 401 error sometimes (working on it)
-- you cant chose the country code in the country code picker somewhy (removed the dropdown becuase it was kinda useless we can consider that fixed for now)
-- registration is kinda broken now (fixed now by the backporting of libsignal)
-- the geckoview captcha thingy is broken on 4.3 but works on 4.4 so idk why it does that but i need to look into it (fixed by using textureview instead of surfaceview)
+- all fixed curently i gueess
 
 # Workarounds that i used to make this work on old android
 
@@ -20,7 +17,7 @@
 - replacing the built in crypto libaries for the api stuff becuase it cant handle tls1.3 like the built in webview and it needed to go because of that
 - replacing the old android crytofactory with a custom one cause the old built in one couldnt handle injecting modern certs into it
 - having to backport java features/classes to the app becuase if they didnt exsist in our version the dalvikvm would just crash because it cant handle it like modern android i guess
-- having to fork libsignal to backport symbols and replace new android apis with their old android 4.x ones to make it not crash
+- having to fork libsignal to backport symbols and replace new android apis with their old android 4.x ones to make it not crash and port its dependencies too
 
 # How to get yourself an apk:
 

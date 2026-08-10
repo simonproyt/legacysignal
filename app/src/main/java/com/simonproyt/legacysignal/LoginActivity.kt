@@ -97,7 +97,7 @@ class LoginActivity : AppCompatActivity() {
                         if (verified) {
                             val secret = ByteArray(16)
                             java.security.SecureRandom().nextBytes(secret)
-                            val generatedPassword = android.util.Base64.encodeToString(secret, android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+                            val generatedPassword = android.util.Base64.encodeToString(secret, android.util.Base64.NO_WRAP)
                             val basicAuth = okhttp3.Credentials.basic(phone, generatedPassword)
                             
                             val aciIdentityKeyPair = org.signal.libsignal.protocol.IdentityKeyPair.generate()
@@ -115,6 +115,9 @@ class LoginActivity : AppCompatActivity() {
                             val pniKyberKeyPair = org.signal.libsignal.protocol.kem.KEMKeyPair.generate(org.signal.libsignal.protocol.kem.KEMKeyType.KYBER_1024)
                             val pniKyberSignature = pniIdentityKeyPair.privateKey.calculateSignature(pniKyberKeyPair.publicKey.serialize())
 
+                            val profileKeyBytes = ByteArray(32)
+                            java.security.SecureRandom().nextBytes(profileKeyBytes)
+
                             val regId = (Math.random() * 16384).toInt()
                             val pniRegId = (Math.random() * 16384).toInt()
                             val regData = com.simonproyt.legacysignal.api.RegistrationRequest(
@@ -123,12 +126,22 @@ class LoginActivity : AppCompatActivity() {
                                 aciIdentityKey = android.util.Base64.encodeToString(aciIdentityKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP),
                                 pniIdentityKey = android.util.Base64.encodeToString(pniIdentityKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP),
                                 accountAttributes = com.simonproyt.legacysignal.api.AccountAttributes(
+                                    voice = true,
+                                    video = true,
                                     fetchesMessages = true,
                                     registrationId = regId,
                                     pniRegistrationId = pniRegId,
-                                    name = "",
-                                    capabilities = mapOf("uuid" to true, "gv2" to true, "storage" to true, "pni" to true, "spqr" to true),
-                                    unrestrictedUnidentifiedAccess = true
+                                    name = null,
+                                    capabilities = com.simonproyt.legacysignal.api.Capabilities(
+                                        storage = true,
+                                        versionedExpirationTimer = true,
+                                        attachmentBackfill = true,
+                                        spqr = true,
+                                        usernameChangeSyncMessage = true
+                                    ),
+                                    unidentifiedAccessKey = android.util.Base64.encodeToString(com.simonproyt.legacysignal.api.crypto.ProfileCipher.deriveUnidentifiedAccessKey(profileKeyBytes), android.util.Base64.NO_WRAP),
+                                    unrestrictedUnidentifiedAccess = true,
+                                    discoverableByPhoneNumber = true
                                 ),
                                 aciSignedPreKey = com.simonproyt.legacysignal.api.ECSignedPreKey(
                                     keyId = 1,
@@ -157,6 +170,7 @@ class LoginActivity : AppCompatActivity() {
                                 override fun onResponse(call: Call<com.simonproyt.legacysignal.api.AccountCreationResponse>, response2: Response<com.simonproyt.legacysignal.api.AccountCreationResponse>) {
                                     if (response2.isSuccessful) {
                                         val uuid = response2.body()?.uuid ?: phone
+                                        val pni = response2.body()?.pni ?: phone
                                         CredentialsManager.saveCredentials(this@LoginActivity, uuid, generatedPassword)
                                         val aciKyberRecord = org.signal.libsignal.protocol.state.KyberPreKeyRecord(1, System.currentTimeMillis(), aciKyberKeyPair, aciKyberSignature)
                                         val pniKyberRecord = org.signal.libsignal.protocol.state.KyberPreKeyRecord(1, System.currentTimeMillis(), pniKyberKeyPair, pniKyberSignature)
@@ -166,9 +180,127 @@ class LoginActivity : AppCompatActivity() {
                                             android.util.Base64.encodeToString(aciKyberRecord.serialize(), android.util.Base64.NO_WRAP),
                                             android.util.Base64.encodeToString(pniKyberRecord.serialize(), android.util.Base64.NO_WRAP)
                                         )
-                                        Toast.makeText(this@LoginActivity, "Registered successfully!", Toast.LENGTH_LONG).show()
-                                        startActivity(Intent(this@LoginActivity, MainActivity::class.java))
-                                        finish()
+                                        
+                                        // Upload 100 One-Time PreKeys for ACI
+                                        Toast.makeText(this@LoginActivity, "Uploading ACI PreKeys...", Toast.LENGTH_SHORT).show()
+                                        val aciPreKeysList = mutableListOf<com.simonproyt.legacysignal.api.PreKey>()
+                                        val pniPreKeysList = mutableListOf<com.simonproyt.legacysignal.api.PreKey>()
+                                        for (i in 1..100) {
+                                            val aciKeyPair = org.signal.libsignal.protocol.ecc.ECKeyPair.generate()
+                                            aciPreKeysList.add(
+                                                com.simonproyt.legacysignal.api.PreKey(
+                                                    keyId = i,
+                                                    publicKey = android.util.Base64.encodeToString(aciKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP)
+                                                )
+                                            )
+                                            val pniKeyPair = org.signal.libsignal.protocol.ecc.ECKeyPair.generate()
+                                            pniPreKeysList.add(
+                                                com.simonproyt.legacysignal.api.PreKey(
+                                                    keyId = i,
+                                                    publicKey = android.util.Base64.encodeToString(pniKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP)
+                                                )
+                                            )
+                                        }
+                                        
+                                        val aciPreKeyUploadRequest = com.simonproyt.legacysignal.api.PreKeyUploadRequest(
+                                            signedPreKey = com.simonproyt.legacysignal.api.ECSignedPreKey(
+                                                keyId = 1,
+                                                publicKey = android.util.Base64.encodeToString(aciSignedPreKeyKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP),
+                                                signature = android.util.Base64.encodeToString(aciSignedPreKeySignature, android.util.Base64.NO_WRAP)
+                                            ),
+                                            preKeys = aciPreKeysList,
+                                            pqLastResortPreKey = com.simonproyt.legacysignal.api.KEMSignedPreKey(
+                                                keyId = 1,
+                                                publicKey = android.util.Base64.encodeToString(aciKyberKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP),
+                                                signature = android.util.Base64.encodeToString(aciKyberSignature, android.util.Base64.NO_WRAP)
+                                            )
+                                        )
+                                        
+                                        val pniPreKeyUploadRequest = com.simonproyt.legacysignal.api.PreKeyUploadRequest(
+                                            signedPreKey = com.simonproyt.legacysignal.api.ECSignedPreKey(
+                                                keyId = 1,
+                                                publicKey = android.util.Base64.encodeToString(pniSignedPreKeyKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP),
+                                                signature = android.util.Base64.encodeToString(pniSignedPreKeySignature, android.util.Base64.NO_WRAP)
+                                            ),
+                                            preKeys = pniPreKeysList,
+                                            pqLastResortPreKey = com.simonproyt.legacysignal.api.KEMSignedPreKey(
+                                                keyId = 1,
+                                                publicKey = android.util.Base64.encodeToString(pniKyberKeyPair.publicKey.serialize(), android.util.Base64.NO_WRAP),
+                                                signature = android.util.Base64.encodeToString(pniKyberSignature, android.util.Base64.NO_WRAP)
+                                            )
+                                        )
+                                        
+                                        val uuidAuth = okhttp3.Credentials.basic(uuid, generatedPassword)
+                                        
+                                        signalClient.api.uploadPreKeys(uuidAuth, "aci", aciPreKeyUploadRequest).enqueue(object : Callback<Void> {
+                                            override fun onResponse(call: Call<Void>, response3: Response<Void>) {
+                                                if (response3.isSuccessful) {
+                                                    Toast.makeText(this@LoginActivity, "Uploading PNI PreKeys...", Toast.LENGTH_SHORT).show()
+                                                    signalClient.api.uploadPreKeys(uuidAuth, "pni", pniPreKeyUploadRequest).enqueue(object : Callback<Void> {
+                                                        override fun onResponse(call: Call<Void>, response4: Response<Void>) {
+                                                            if (response4.isSuccessful) {
+                                                                Toast.makeText(this@LoginActivity, "Uploading Profile...", Toast.LENGTH_SHORT).show()
+                                                                
+                                                                val profileKey = org.signal.libsignal.zkgroup.profiles.ProfileKey(profileKeyBytes)
+                                                                val profileCipher = com.simonproyt.legacysignal.api.crypto.ProfileCipher(profileKey)
+                                                                
+                                                                val aciObj = org.signal.libsignal.protocol.ServiceId.Aci.parseFromString(uuid)
+                                                                val version = profileKey.getProfileKeyVersion(aciObj)
+                                                                val commitment = profileKey.getCommitment(aciObj)
+                                                                
+                                                                val profileWrite = com.simonproyt.legacysignal.api.SignalServiceProfileWrite(
+                                                                    version = version.serialize(),
+                                                                    name = android.util.Base64.encodeToString(profileCipher.encryptString("Emulator User", 53), android.util.Base64.NO_WRAP),
+                                                                    about = android.util.Base64.encodeToString(profileCipher.encryptString("Hello Signal!", 128), android.util.Base64.NO_WRAP),
+                                                                    aboutEmoji = android.util.Base64.encodeToString(profileCipher.encryptString("", 32), android.util.Base64.NO_WRAP),
+                                                                    paymentAddress = null,
+                                                                    phoneNumberSharing = android.util.Base64.encodeToString(profileCipher.encryptBoolean(true), android.util.Base64.NO_WRAP),
+                                                                    avatar = false,
+                                                                    sameAvatar = false,
+                                                                    commitment = android.util.Base64.encodeToString(commitment.serialize(), android.util.Base64.NO_WRAP),
+                                                                    badgeIds = emptyList()
+                                                                )
+                                                                
+                                                                signalClient.api.uploadProfile(uuidAuth, profileWrite).enqueue(object : Callback<Void> {
+                                                                    override fun onResponse(call: Call<Void>, response5: Response<Void>) {
+                                                                        if (response5.isSuccessful) {
+                                                                            Toast.makeText(this@LoginActivity, "Registered successfully!", Toast.LENGTH_LONG).show()
+                                                                            startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                                                                            finish()
+                                                                        } else {
+                                                                            btnLogin.isEnabled = true
+                                                                            Toast.makeText(this@LoginActivity, "Profile upload failed: ${response5.code()}", Toast.LENGTH_SHORT).show()
+                                                                            Log.e("LoginActivity", "Profile upload failed: ${response5.code()} ${response5.message()}")
+                                                                        }
+                                                                    }
+                                                                    override fun onFailure(call: Call<Void>, t: Throwable) {
+                                                                        btnLogin.isEnabled = true
+                                                                        Toast.makeText(this@LoginActivity, "Network error during Profile upload", Toast.LENGTH_SHORT).show()
+                                                                    }
+                                                                })
+                                                            } else {
+                                                                btnLogin.isEnabled = true
+                                                                Toast.makeText(this@LoginActivity, "PNI PreKey upload failed: ${response4.code()}", Toast.LENGTH_SHORT).show()
+                                                                Log.e("LoginActivity", "PNI PreKey upload failed: ${response4.code()} ${response4.message()}")
+                                                            }
+                                                        }
+                                                        override fun onFailure(call: Call<Void>, t: Throwable) {
+                                                            btnLogin.isEnabled = true
+                                                            Toast.makeText(this@LoginActivity, "Network error during PNI PreKey upload", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    })
+                                                } else {
+                                                    btnLogin.isEnabled = true
+                                                    Toast.makeText(this@LoginActivity, "ACI PreKey upload failed: ${response3.code()}", Toast.LENGTH_SHORT).show()
+                                                    Log.e("LoginActivity", "ACI PreKey upload failed: ${response3.code()} ${response3.message()}")
+                                                }
+                                            }
+                                            override fun onFailure(call: Call<Void>, t: Throwable) {
+                                                btnLogin.isEnabled = true
+                                                Toast.makeText(this@LoginActivity, "Network error during ACI PreKey upload", Toast.LENGTH_SHORT).show()
+                                            }
+                                        })
+                                        
                                     } else {
                                         btnLogin.isEnabled = true
                                         Toast.makeText(this@LoginActivity, "Account setup failed: ${response2.code()}", Toast.LENGTH_SHORT).show()

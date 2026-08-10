@@ -11,7 +11,8 @@ import okio.ByteString
 class SignalWebSocket(
     private val client: OkHttpClient,
     private val url: String,
-    private val authHeader: String
+    private val authHeader: String,
+    private val onMessageReceived: ((com.simonproyt.legacysignal.api.push.SignalServiceProtos.Envelope) -> Unit)? = null
 ) {
     private var webSocket: WebSocket? = null
 
@@ -32,7 +33,44 @@ class SignalWebSocket(
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                Log.d("SignalWebSocket", "Received bytes: ${bytes.hex()}")
+                Log.d("SignalWebSocket", "Received bytes: ${bytes.size()} bytes")
+                try {
+                    val message = com.simonproyt.legacysignal.api.websocket.WebSocketProtos.WebSocketMessage.parseFrom(bytes.toByteArray())
+                    
+                    if (message.type == com.simonproyt.legacysignal.api.websocket.WebSocketProtos.WebSocketMessage.Type.REQUEST) {
+                        val request = message.request
+                        Log.d("SignalWebSocket", "Received REQUEST: ${request.verb} ${request.path}")
+                        
+                        // Send 200 OK back to the server so it doesn't think we disconnected
+                        val response = com.simonproyt.legacysignal.api.websocket.WebSocketProtos.WebSocketResponseMessage.newBuilder()
+                            .setId(request.id)
+                            .setStatus(200)
+                            .setMessage("OK")
+                            .build()
+                            
+                        val responseMsg = com.simonproyt.legacysignal.api.websocket.WebSocketProtos.WebSocketMessage.newBuilder()
+                            .setType(com.simonproyt.legacysignal.api.websocket.WebSocketProtos.WebSocketMessage.Type.RESPONSE)
+                            .setResponse(response)
+                            .build()
+                            
+                        webSocket.send(ByteString.of(*responseMsg.toByteArray()))
+                        
+                        // Handle actual message bodies (like Envelope) later via callback
+                        if (request.path == "/api/v1/message" && !request.body.isEmpty) {
+                            try {
+                                val envelope = com.simonproyt.legacysignal.api.push.SignalServiceProtos.Envelope.parseFrom(request.body)
+                                Log.i("SignalWebSocket", "Decoded Envelope from ${envelope.source}")
+                                onMessageReceived?.invoke(envelope)
+                            } catch (e: Exception) {
+                                Log.e("SignalWebSocket", "Failed to parse Envelope", e)
+                            }
+                        }
+                    } else if (message.type == com.simonproyt.legacysignal.api.websocket.WebSocketProtos.WebSocketMessage.Type.RESPONSE) {
+                        Log.d("SignalWebSocket", "Received RESPONSE: status ${message.response.status}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("SignalWebSocket", "Failed to parse WebSocketMessage", e)
+                }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {

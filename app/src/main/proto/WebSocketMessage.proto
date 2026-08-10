@@ -1,0 +1,31 @@
+syntax = "proto3";
+package org.whispersystems.signalservice.internal.websocket;
+option java_package = "com.simonproyt.legacysignal.api.websocket";
+option java_outer_classname = "WebSocketProtos";
+
+message WebSocketRequestMessage {
+    string verb = 1;
+    string path = 2;
+    bytes body = 3;
+    uint64 id = 4;
+    repeated string headers = 5;
+}
+
+message WebSocketResponseMessage {
+    uint64 id = 1;
+    uint32 status = 2;
+    string message = 3;
+    bytes body = 4;
+    repeated string headers = 5;
+}
+
+message WebSocketMessage {
+    enum Type {
+        UNKNOWN = 0;
+        REQUEST = 1;
+        RESPONSE = 2;
+    }
+    Type type = 1;
+    WebSocketRequestMessage request = 2;
+    WebSocketResponseMessage response = 3;
+}

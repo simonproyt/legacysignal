@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.google.devtools.ksp)
     alias(libs.plugins.jetbrains.kotlin.plugin.serialization)
+    id("com.google.protobuf")
 }
 
 android {
@@ -43,11 +44,15 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
+    
+    // Protobuf
+    implementation("com.google.protobuf:protobuf-javalite:3.21.12")
 
     // Signal
     implementation(files("libs/libsignal-android-0.86.5-compat.aar"))
     implementation(files("libs/libsignal-client-0.86.5.jar"))
     implementation(libs.conscrypt.android)
+    implementation("org.bouncycastle:bcprov-jdk15to18:1.77")
 
     // Legacy networking
     implementation(libs.okhttp)
@@ -70,4 +75,19 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation("androidx.tracing:tracing:1.0.0")
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.21.12"
+    }
+    generateProtoTasks {
+        all().forEach { task ->
+            task.builtins {
+                create("java") {
+                    option("lite")
+                }
+            }
+        }
+    }
 }

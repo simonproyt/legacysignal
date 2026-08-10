@@ -38,11 +38,16 @@ class SignalClient(private val context: Context, private val phoneNumber: String
             .create(SignalApi::class.java)
     }
 
+    var onMessageReceived: ((com.simonproyt.legacysignal.api.push.SignalServiceProtos.Envelope) -> Unit)? = null
+
     val webSocket: SignalWebSocket by lazy {
         SignalWebSocket(
             client = okHttpClient,
             url = "wss://chat.signal.org/v1/websocket/",
-            authHeader = authHeader
+            authHeader = authHeader,
+            onMessageReceived = { envelope ->
+                onMessageReceived?.invoke(envelope)
+            }
         )
     }
 

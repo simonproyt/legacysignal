@@ -1,0 +1,25 @@
+syntax = "proto3";
+package org.whispersystems.signalservice.internal.push;
+option java_package = "com.simonproyt.legacysignal.api.push";
+option java_outer_classname = "SignalServiceProtos";
+
+message Envelope {
+    enum Type {
+        UNKNOWN = 0;
+        CIPHERTEXT = 1;
+        KEY_EXCHANGE = 2;
+        PREKEY_BUNDLE = 3;
+        RECEIPT = 5;
+        UNIDENTIFIED_SENDER = 6;
+    }
+    Type type = 1;
+    string source = 2;
+    uint32 sourceDevice = 7;
+    string relay = 3;
+    uint64 timestamp = 5;
+    bytes legacyMessage = 6;
+    bytes content = 8;
+    string serverGuid = 9;
+    uint64 serverTimestamp = 10;
+    string uuid = 11;
+}
