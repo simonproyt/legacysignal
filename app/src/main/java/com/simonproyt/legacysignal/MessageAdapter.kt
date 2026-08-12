@@ -7,11 +7,15 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
 data class ChatMessage(
+    val id: Long,
     val sender: String,
     val text: String
 )
 
-class MessageAdapter(private val messages: MutableList<ChatMessage>) : RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
+class MessageAdapter(
+    private val messages: MutableList<ChatMessage>,
+    private val onMessageLongClick: ((Long) -> Unit)? = null
+) : RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
 
     class MessageViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val tvSender: TextView = view.findViewById(R.id.tvSender)
@@ -27,6 +31,10 @@ class MessageAdapter(private val messages: MutableList<ChatMessage>) : RecyclerV
         val message = messages[position]
         holder.tvSender.text = message.sender
         holder.tvMessage.text = message.text
+        holder.itemView.setOnLongClickListener {
+            onMessageLongClick?.invoke(message.id)
+            true
+        }
     }
 
     override fun getItemCount() = messages.size

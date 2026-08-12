@@ -43,7 +43,18 @@ class ChatActivity : AppCompatActivity() {
         BackgroundSyncManager.start(this)
         signalClient = BackgroundSyncManager.getClient() ?: SignalClient(this, phone, pass)
         
-        messageAdapter = MessageAdapter(messagesList)
+        messageAdapter = MessageAdapter(messagesList) { msgId ->
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Delete Message")
+                .setMessage("Are you sure you want to delete this message?")
+                .setPositiveButton("Delete") { _, _ ->
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        db.deleteMessage(msgId)
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
         val rvMessages = findViewById<RecyclerView>(R.id.rvMessages)
         rvMessages.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
         rvMessages.adapter = messageAdapter
@@ -68,9 +79,16 @@ class ChatActivity : AppCompatActivity() {
             }
 
             db.getMessagesForThread(threadId).collectLatest { msgs ->
+                val existingThread = db.getThreadById(threadId)
+                val displayName = existingThread?.name?.takeIf { it.isNotBlank() } ?: recipientId
+                
+                withContext(Dispatchers.Main) {
+                    supportActionBar?.title = displayName
+                }
+
                 messagesList.clear()
                 msgs.forEach { msg ->
-                    messagesList.add(ChatMessage(if (msg.isOutgoing) "Me" else recipientId, msg.body))
+                    messagesList.add(ChatMessage(msg.id, if (msg.isOutgoing) "Me" else displayName, msg.body))
                 }
                 messageAdapter.notifyDataSetChanged()
                 if (messagesList.isNotEmpty()) {
@@ -103,7 +121,7 @@ class ChatActivity : AppCompatActivity() {
                         )
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
-                            messageAdapter.addMessage(ChatMessage("System", "Failed to send: ${e.message}"))
+                            messageAdapter.addMessage(ChatMessage(-1L, "System", "Failed to send: ${e.message}"))
                             rvMessages.scrollToPosition(messagesList.size - 1)
                         }
                     }

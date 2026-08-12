@@ -89,9 +89,8 @@ class MessageSender(
             val cipher = SessionCipher(store, address)
             val ciphertextMsg = cipher.encrypt(content.toByteArray())
             
-            // In modern Signal, it's UnidentifiedSenderMessageContent, but for now we'll just send standard SignalMessage/PreKeySignalMessage.
-            // Type 2 = PreKeySignalMessage, Type 3 = SignalMessage
-            val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 2 else 3
+            // In modern Signal, Envelope types are CIPHERTEXT(1) for Whisper/SignalMessage and PREKEY_BUNDLE(3) for PreKeySignalMessage
+            val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 3 else 1
 
             val pushMessage = OutgoingPushMessage(
                 type = msgType,

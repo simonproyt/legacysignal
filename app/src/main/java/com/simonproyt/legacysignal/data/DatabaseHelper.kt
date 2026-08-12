@@ -198,6 +198,11 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         id
     }
 
+    suspend fun deleteMessage(id: Long) = withContext(Dispatchers.IO) {
+        writableDatabase.delete("messages", "id = ?", arrayOf(id.toString()))
+        notifyDbChanged()
+    }
+
     companion object {
         const val DATABASE_NAME = "signal_database"
         const val DATABASE_VERSION = 2
