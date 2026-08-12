@@ -3,8 +3,11 @@
 - Whats working:
   - Captchas and displaying them trough geckoview because the built in android 4.x webview is too old to handle modern encryptions
   - sending the actual sms code (finally after 3 and a half hours of development hell its working)
+  - registration to signal
+  - reciving messages
 - Whats not working:
-  - singal itself i guess becuase the homescreen itself isnt even implamented yet so its a shell of a complete app rn
+  - replying to messages i guess
+  - contacts and not just showing user ids as names
 
 # Bugs
 

@@ -72,6 +72,34 @@ data class PreKey(
     val publicKey: String
 )
 
+data class PreKeyResponseItem(
+    val deviceId: Int,
+    val registrationId: Int,
+    val signedPreKey: ECSignedPreKey?,
+    val preKey: PreKey?,
+    val pqPreKey: KEMSignedPreKey? // named pqPreKey in JSON
+)
+
+data class PreKeyResponse(
+    val identityKey: String,
+    val devices: List<PreKeyResponseItem>
+)
+
+data class OutgoingPushMessage(
+    val type: Int,
+    val destinationDeviceId: Int,
+    val destinationRegistrationId: Int,
+    val content: String
+)
+
+data class OutgoingPushMessageList(
+    val destination: String,
+    val timestamp: Long,
+    val messages: List<OutgoingPushMessage>,
+    val online: Boolean,
+    val urgent: Boolean
+)
+
 data class PreKeyUploadRequest(
     val signedPreKey: ECSignedPreKey,
     val preKeys: List<PreKey>,
@@ -137,5 +165,19 @@ interface SignalApi {
     fun uploadProfile(
         @Header("Authorization") auth: String,
         @Body profile: SignalServiceProfileWrite
+    ): Call<Void>
+
+    @GET("/v2/keys/{identifier}")
+    fun getPreKeys(
+        @Header("Authorization") auth: String,
+        @Path("identifier") identifier: String
+    ): Call<PreKeyResponse>
+
+    @PUT("/v1/messages/{destination}")
+    fun sendMessage(
+        @Header("Authorization") auth: String,
+        @Path("destination") destination: String,
+        @Query("story") story: Boolean = false,
+        @Body request: OutgoingPushMessageList
     ): Call<Void>
 }

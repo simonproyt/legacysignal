@@ -1,0 +1,125 @@
+package com.simonproyt.legacysignal.crypto
+
+import android.util.Base64
+import android.util.Log
+import com.simonproyt.legacysignal.api.SignalApi
+import com.simonproyt.legacysignal.api.OutgoingPushMessage
+import com.simonproyt.legacysignal.api.OutgoingPushMessageList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.signal.libsignal.protocol.SessionBuilder
+import org.signal.libsignal.protocol.SessionCipher
+import org.signal.libsignal.protocol.SignalProtocolAddress
+import org.signal.libsignal.protocol.state.PreKeyBundle
+import org.signal.libsignal.protocol.ecc.ECPublicKey
+import org.signal.libsignal.protocol.kem.KEMPublicKey
+import org.signal.libsignal.protocol.IdentityKey
+import org.signal.libsignal.protocol.message.CiphertextMessage
+
+class MessageSender(
+    private val api: SignalApi,
+    private val store: SharedPrefsSignalProtocolStore,
+    private val authHeader: String
+) {
+    suspend fun sendMessage(
+        destinationUuid: String,
+        messageBody: String,
+        timestamp: Long = System.currentTimeMillis()
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val address = SignalProtocolAddress(destinationUuid, 1)
+
+            // If we don't have a session, fetch prekeys and build one
+            if (!store.containsSession(address)) {
+                Log.d("MessageSender", "No session for \$destinationUuid, fetching prekeys...")
+                val response = api.getPreKeys(authHeader, destinationUuid).execute()
+                if (!response.isSuccessful || response.body() == null) {
+                    Log.e("MessageSender", "Failed to fetch prekeys for \$destinationUuid: \${response.code()}")
+                    return@withContext false
+                }
+                
+                val preKeyResponse = response.body()!!
+                val device = preKeyResponse.devices.firstOrNull { it.deviceId == 1 } 
+                    ?: preKeyResponse.devices.first()
+                
+                // Build PreKeyBundle
+                val identityKey = IdentityKey(Base64.decode(preKeyResponse.identityKey, Base64.NO_WRAP))
+                val signedPreKeyPubKey = ECPublicKey(Base64.decode(device.signedPreKey?.publicKey, Base64.NO_WRAP))
+                val signedPreKeySig = Base64.decode(device.signedPreKey?.signature, Base64.NO_WRAP)
+                val preKeyPubKey = device.preKey?.publicKey?.let { ECPublicKey(Base64.decode(it, Base64.NO_WRAP)) }
+                val preKeyId = device.preKey?.keyId ?: 16777215 // NULL_PRE_KEY_ID
+                val signedPreKeyId = device.signedPreKey?.keyId ?: 0
+
+                val kyberPreKey = device.pqPreKey ?: throw IllegalStateException("No kyber prekey for device")
+                val kyberBytes = Base64.decode(kyberPreKey.publicKey, Base64.NO_WRAP)
+                val kyberKey = KEMPublicKey(kyberBytes, 0, kyberBytes.size)
+                val kyberSig = Base64.decode(kyberPreKey.signature, Base64.NO_WRAP)
+                
+                val bundle = PreKeyBundle(
+                    device.registrationId,
+                    device.deviceId,
+                    preKeyId,
+                    preKeyPubKey,
+                    signedPreKeyId,
+                    signedPreKeyPubKey,
+                    signedPreKeySig,
+                    identityKey,
+                    kyberPreKey.keyId ?: 0,
+                    kyberKey,
+                    kyberSig
+                )
+
+                val builder = SessionBuilder(store, address)
+                builder.process(bundle)
+                Log.d("MessageSender", "Session built for \$destinationUuid")
+            }
+
+            // Create Content proto
+            val content = com.simonproyt.legacysignal.api.push.SignalServiceProtos.Content.newBuilder()
+                .setDataMessage(
+                    com.simonproyt.legacysignal.api.push.SignalServiceProtos.DataMessage.newBuilder()
+                        .setTimestamp(timestamp)
+                        .setBody(messageBody)
+                        .build()
+                )
+                .build()
+
+            // Pad the message (PKCS7 style padding as Signal does, or just append 0x00? 
+            // In libsignal, usually handled by envelope, but let's just encrypt the raw content)
+            val cipher = SessionCipher(store, address)
+            val ciphertextMsg = cipher.encrypt(content.toByteArray())
+            
+            // In modern Signal, it's UnidentifiedSenderMessageContent, but for now we'll just send standard SignalMessage/PreKeySignalMessage.
+            // Type 2 = PreKeySignalMessage, Type 3 = SignalMessage
+            val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 2 else 3
+
+            val pushMessage = OutgoingPushMessage(
+                type = msgType,
+                destinationDeviceId = 1,
+                destinationRegistrationId = 0, // usually fetched from device info, or 0 if unknown
+                content = Base64.encodeToString(ciphertextMsg.serialize(), Base64.NO_WRAP)
+            )
+
+            val pushList = OutgoingPushMessageList(
+                destination = destinationUuid,
+                timestamp = timestamp,
+                messages = listOf(pushMessage),
+                online = false,
+                urgent = true
+            )
+
+            val response = api.sendMessage(authHeader, destinationUuid, false, pushList).execute()
+            if (response.isSuccessful) {
+                Log.d("MessageSender", "Message sent successfully to \$destinationUuid")
+                return@withContext true
+            } else {
+                Log.e("MessageSender", "Failed to send message: \${response.code()} \${response.errorBody()?.string()}")
+                return@withContext false
+            }
+
+        } catch (e: Exception) {
+            Log.e("MessageSender", "Exception sending message", e)
+            return@withContext false
+        }
+    }
+}

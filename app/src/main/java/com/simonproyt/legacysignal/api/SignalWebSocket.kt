@@ -59,7 +59,7 @@ class SignalWebSocket(
                         if (request.path == "/api/v1/message" && !request.body.isEmpty) {
                             try {
                                 val envelope = com.simonproyt.legacysignal.api.push.SignalServiceProtos.Envelope.parseFrom(request.body)
-                                Log.i("SignalWebSocket", "Decoded Envelope from ${envelope.source}")
+                                Log.i("SignalWebSocket", "Decoded Envelope from ${envelope.sourceServiceId}")
                                 onMessageReceived?.invoke(envelope)
                             } catch (e: Exception) {
                                 Log.e("SignalWebSocket", "Failed to parse Envelope", e)
