@@ -118,6 +118,10 @@ data class AccountCreationResponse(
     val pni: String
 )
 
+data class DeliveryCertificateResponse(
+    val certificate: String
+)
+
 interface SignalApi {
     
     @POST("/v1/verification/session")
@@ -172,6 +176,12 @@ interface SignalApi {
         @Header("Authorization") auth: String,
         @Path("identifier") identifier: String
     ): Call<PreKeyResponse>
+
+    @GET("/v1/certificate/delivery")
+    fun getDeliveryCertificate(
+        @Header("Authorization") authHeader: String,
+        @Query("includeDirectories") includeDirectories: Boolean = true
+    ): Call<DeliveryCertificateResponse>
 
     @PUT("/v1/messages/{destination}")
     fun sendMessage(

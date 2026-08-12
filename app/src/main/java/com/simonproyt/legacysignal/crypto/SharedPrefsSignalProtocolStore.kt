@@ -40,6 +40,15 @@ class SharedPrefsSignalProtocolStore(private val context: Context) : SignalProto
         prefs.edit().putInt("local_registration_id", registrationId).apply()
     }
 
+    fun saveDeliveryCertificate(certBytes: ByteArray) {
+        prefs.edit().putString("delivery_certificate", Base64.encodeToString(certBytes, Base64.NO_WRAP)).apply()
+    }
+
+    fun getDeliveryCertificate(): ByteArray? {
+        val b64 = prefs.getString("delivery_certificate", null) ?: return null
+        return Base64.decode(b64, Base64.NO_WRAP)
+    }
+
     override fun saveIdentity(address: SignalProtocolAddress?, identityKey: IdentityKey?): org.signal.libsignal.protocol.state.IdentityKeyStore.IdentityChange? {
         if (address == null || identityKey == null) return org.signal.libsignal.protocol.state.IdentityKeyStore.IdentityChange.NEW_OR_UNCHANGED
         prefs.edit().putString("identity_${address.name}", Base64.encodeToString(identityKey.serialize(), Base64.NO_WRAP)).apply()

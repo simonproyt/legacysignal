@@ -15,6 +15,9 @@ import org.signal.libsignal.protocol.ecc.ECPublicKey
 import org.signal.libsignal.protocol.kem.KEMPublicKey
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.message.CiphertextMessage
+import org.signal.libsignal.metadata.SealedSessionCipher
+import org.signal.libsignal.metadata.certificate.SenderCertificate
+import java.util.UUID
 
 class MessageSender(
     private val api: SignalApi,
@@ -54,6 +57,38 @@ class MessageSender(
                 }
                 
                 val pushMessages = mutableListOf<OutgoingPushMessage>()
+                
+                var certBytes = store.getDeliveryCertificate()
+                if (certBytes != null) {
+                    try {
+                        SenderCertificate(certBytes)
+                    } catch (e: Exception) {
+                        Log.w("MessageSender", "Cached delivery certificate is invalid, clearing cache.")
+                        certBytes = null
+                    }
+                }
+
+                if (certBytes == null) {
+                    val certResponse = api.getDeliveryCertificate(authHeader).execute()
+                    if (certResponse.isSuccessful) {
+                        val certB64 = certResponse.body()?.certificate
+                        if (certB64 != null) {
+                            certBytes = Base64.decode(certB64, Base64.NO_WRAP)
+                            store.saveDeliveryCertificate(certBytes!!)
+                        }
+                    } else {
+                        Log.w("MessageSender", "Failed to fetch delivery certificate: ${certResponse.code()}")
+                    }
+                }
+
+                val senderCertificate = certBytes?.let {
+                    try {
+                        SenderCertificate(it)
+                    } catch (e: Exception) {
+                        Log.e("MessageSender", "Invalid certificate", e)
+                        null
+                    }
+                }
                 
                 for (deviceId in activeDeviceIds) {
                     val address = SignalProtocolAddress(destinationUuid, deviceId)
@@ -111,9 +146,20 @@ class MessageSender(
                     System.arraycopy(contentBytes, 0, paddedBytes, 0, contentBytes.size)
                     paddedBytes[contentBytes.size] = 0x80.toByte()
 
-                    val cipher = SessionCipher(store, address)
-                    val ciphertextMsg = cipher.encrypt(paddedBytes)
-                    val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 3 else 1
+                    var msgType = 1
+                    val ciphertextMsgBytes = if (senderCertificate != null) {
+                        val localUuid = UUID.fromString(senderCertificate.senderUuid)
+                        val localE164 = senderCertificate.senderE164.orElse(null)
+                        val localDeviceId = senderCertificate.senderDeviceId
+                        val cipher = SealedSessionCipher(store, localUuid, localE164, localDeviceId)
+                        msgType = 6 // UNIDENTIFIED_SENDER
+                        cipher.encrypt(address, senderCertificate, paddedBytes)
+                    } else {
+                        val cipher = SessionCipher(store, address)
+                        val ciphertextMsg = cipher.encrypt(paddedBytes)
+                        msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 3 else 1
+                        ciphertextMsg.serialize()
+                    }
                     
                     val remoteRegistrationId = try {
                         store.loadSession(address).remoteRegistrationId
@@ -125,7 +171,7 @@ class MessageSender(
                         type = msgType,
                         destinationDeviceId = deviceId,
                         destinationRegistrationId = remoteRegistrationId,
-                        content = Base64.encodeToString(ciphertextMsg.serialize(), Base64.NO_WRAP)
+                        content = Base64.encodeToString(ciphertextMsgBytes, Base64.NO_WRAP)
                     ))
                 }
 
