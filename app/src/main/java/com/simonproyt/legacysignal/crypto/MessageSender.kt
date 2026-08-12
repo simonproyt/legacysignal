@@ -27,94 +27,129 @@ class MessageSender(
         timestamp: Long = System.currentTimeMillis()
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val address = SignalProtocolAddress(destinationUuid, 1)
+            var attempt = 0
+            while (attempt < 2) {
+                attempt++
+                
+                // Fetch prekeys to get all active devices if we don't have sessions, or if we are retrying
+                // To support multiple devices without caching, we'll just fetch prekeys on attempt 2 or if no primary session exists
+                val fetchPrekeys = attempt > 1 || !store.containsSession(SignalProtocolAddress(destinationUuid, 1))
+                
+                val preKeyResponse = if (fetchPrekeys) {
+                    val response = api.getPreKeys(authHeader, destinationUuid).execute()
+                    if (!response.isSuccessful || response.body() == null) {
+                        Log.e("MessageSender", "Failed to fetch prekeys for $destinationUuid: ${response.code()}")
+                        return@withContext false
+                    }
+                    response.body()!!
+                } else null
 
-            // If we don't have a session, fetch prekeys and build one
-            if (!store.containsSession(address)) {
-                Log.d("MessageSender", "No session for \$destinationUuid, fetching prekeys...")
-                val response = api.getPreKeys(authHeader, destinationUuid).execute()
-                if (!response.isSuccessful || response.body() == null) {
-                    Log.e("MessageSender", "Failed to fetch prekeys for \$destinationUuid: \${response.code()}")
+                // If we didn't fetch prekeys, we assume we're just sending to device 1 (simplification)
+                // In a robust implementation, we would store all known device IDs.
+                val activeDeviceIds = preKeyResponse?.devices?.map { it.deviceId } ?: listOf(1)
+                
+                val pushMessages = mutableListOf<OutgoingPushMessage>()
+                
+                for (deviceId in activeDeviceIds) {
+                    val address = SignalProtocolAddress(destinationUuid, deviceId)
+                    
+                    if (!store.containsSession(address)) {
+                        if (preKeyResponse == null) continue // Should not happen
+                        
+                        val device = preKeyResponse.devices.firstOrNull { it.deviceId == deviceId } ?: continue
+                        
+                        Log.d("MessageSender", "No session for $destinationUuid:$deviceId, building...")
+                        
+                        val identityKey = IdentityKey(Base64.decode(preKeyResponse.identityKey, Base64.NO_WRAP))
+                        val signedPreKeyPubKey = ECPublicKey(Base64.decode(device.signedPreKey?.publicKey, Base64.NO_WRAP))
+                        val signedPreKeySig = Base64.decode(device.signedPreKey?.signature, Base64.NO_WRAP)
+                        val preKeyPubKey = device.preKey?.publicKey?.let { ECPublicKey(Base64.decode(it, Base64.NO_WRAP)) }
+                        val preKeyId = device.preKey?.keyId ?: 16777215
+                        val signedPreKeyId = device.signedPreKey?.keyId ?: 0
+
+                        val kyberPreKey = device.pqPreKey ?: throw IllegalStateException("No kyber prekey for device")
+                        val kyberBytes = Base64.decode(kyberPreKey.publicKey, Base64.NO_WRAP)
+                        val kyberKey = KEMPublicKey(kyberBytes, 0, kyberBytes.size)
+                        val kyberSig = Base64.decode(kyberPreKey.signature, Base64.NO_WRAP)
+                        
+                        val bundle = PreKeyBundle(
+                            device.registrationId,
+                            device.deviceId,
+                            preKeyId,
+                            preKeyPubKey,
+                            signedPreKeyId,
+                            signedPreKeyPubKey,
+                            signedPreKeySig,
+                            identityKey,
+                            kyberPreKey.keyId ?: 0,
+                            kyberKey,
+                            kyberSig
+                        )
+
+                        val builder = SessionBuilder(store, address)
+                        builder.process(bundle)
+                        Log.d("MessageSender", "Session built for $destinationUuid:$deviceId")
+                    }
+
+                    // Create Content proto
+                    val content = com.simonproyt.legacysignal.api.push.SignalServiceProtos.Content.newBuilder()
+                        .setDataMessage(
+                            com.simonproyt.legacysignal.api.push.SignalServiceProtos.DataMessage.newBuilder()
+                                .setTimestamp(timestamp)
+                                .setBody(messageBody)
+                                .build()
+                        )
+                        .build()
+
+                    val cipher = SessionCipher(store, address)
+                    val ciphertextMsg = cipher.encrypt(content.toByteArray())
+                    val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 3 else 1
+                    
+                    val remoteRegistrationId = try {
+                        store.loadSession(address).remoteRegistrationId
+                    } catch (e: Exception) {
+                        0
+                    }
+
+                    pushMessages.add(OutgoingPushMessage(
+                        type = msgType,
+                        destinationDeviceId = deviceId,
+                        destinationRegistrationId = remoteRegistrationId,
+                        content = Base64.encodeToString(ciphertextMsg.serialize(), Base64.NO_WRAP)
+                    ))
+                }
+
+                if (pushMessages.isEmpty()) {
+                    Log.e("MessageSender", "No devices to send to!")
                     return@withContext false
                 }
-                
-                val preKeyResponse = response.body()!!
-                val device = preKeyResponse.devices.firstOrNull { it.deviceId == 1 } 
-                    ?: preKeyResponse.devices.first()
-                
-                // Build PreKeyBundle
-                val identityKey = IdentityKey(Base64.decode(preKeyResponse.identityKey, Base64.NO_WRAP))
-                val signedPreKeyPubKey = ECPublicKey(Base64.decode(device.signedPreKey?.publicKey, Base64.NO_WRAP))
-                val signedPreKeySig = Base64.decode(device.signedPreKey?.signature, Base64.NO_WRAP)
-                val preKeyPubKey = device.preKey?.publicKey?.let { ECPublicKey(Base64.decode(it, Base64.NO_WRAP)) }
-                val preKeyId = device.preKey?.keyId ?: 16777215 // NULL_PRE_KEY_ID
-                val signedPreKeyId = device.signedPreKey?.keyId ?: 0
 
-                val kyberPreKey = device.pqPreKey ?: throw IllegalStateException("No kyber prekey for device")
-                val kyberBytes = Base64.decode(kyberPreKey.publicKey, Base64.NO_WRAP)
-                val kyberKey = KEMPublicKey(kyberBytes, 0, kyberBytes.size)
-                val kyberSig = Base64.decode(kyberPreKey.signature, Base64.NO_WRAP)
-                
-                val bundle = PreKeyBundle(
-                    device.registrationId,
-                    device.deviceId,
-                    preKeyId,
-                    preKeyPubKey,
-                    signedPreKeyId,
-                    signedPreKeyPubKey,
-                    signedPreKeySig,
-                    identityKey,
-                    kyberPreKey.keyId ?: 0,
-                    kyberKey,
-                    kyberSig
+                val pushList = OutgoingPushMessageList(
+                    destination = destinationUuid,
+                    timestamp = timestamp,
+                    messages = pushMessages,
+                    online = false,
+                    urgent = true
                 )
 
-                val builder = SessionBuilder(store, address)
-                builder.process(bundle)
-                Log.d("MessageSender", "Session built for \$destinationUuid")
+                val response = api.sendMessage(authHeader, destinationUuid, false, pushList).execute()
+                if (response.isSuccessful) {
+                    Log.d("MessageSender", "Message sent successfully to $destinationUuid")
+                    return@withContext true
+                } else if (response.code() == 410 || response.code() == 409) {
+                    Log.w("MessageSender", "Stale device (410/409), deleting sessions and retrying...")
+                    // We just delete all sessions we tried to send to, and retry (which will fetch new prekeys)
+                    for (msg in pushMessages) {
+                        store.deleteSession(SignalProtocolAddress(destinationUuid, msg.destinationDeviceId))
+                    }
+                    continue
+                } else {
+                    Log.e("MessageSender", "Failed to send message: ${response.code()} ${response.errorBody()?.string()}")
+                    return@withContext false
+                }
             }
-
-            // Create Content proto
-            val content = com.simonproyt.legacysignal.api.push.SignalServiceProtos.Content.newBuilder()
-                .setDataMessage(
-                    com.simonproyt.legacysignal.api.push.SignalServiceProtos.DataMessage.newBuilder()
-                        .setTimestamp(timestamp)
-                        .setBody(messageBody)
-                        .build()
-                )
-                .build()
-
-            // Pad the message (PKCS7 style padding as Signal does, or just append 0x00? 
-            // In libsignal, usually handled by envelope, but let's just encrypt the raw content)
-            val cipher = SessionCipher(store, address)
-            val ciphertextMsg = cipher.encrypt(content.toByteArray())
             
-            // In modern Signal, Envelope types are CIPHERTEXT(1) for Whisper/SignalMessage and PREKEY_BUNDLE(3) for PreKeySignalMessage
-            val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 3 else 1
-
-            val pushMessage = OutgoingPushMessage(
-                type = msgType,
-                destinationDeviceId = 1,
-                destinationRegistrationId = 0, // usually fetched from device info, or 0 if unknown
-                content = Base64.encodeToString(ciphertextMsg.serialize(), Base64.NO_WRAP)
-            )
-
-            val pushList = OutgoingPushMessageList(
-                destination = destinationUuid,
-                timestamp = timestamp,
-                messages = listOf(pushMessage),
-                online = false,
-                urgent = true
-            )
-
-            val response = api.sendMessage(authHeader, destinationUuid, false, pushList).execute()
-            if (response.isSuccessful) {
-                Log.d("MessageSender", "Message sent successfully to \$destinationUuid")
-                return@withContext true
-            } else {
-                Log.e("MessageSender", "Failed to send message: \${response.code()} \${response.errorBody()?.string()}")
-                return@withContext false
-            }
+            return@withContext false
 
         } catch (e: Exception) {
             Log.e("MessageSender", "Exception sending message", e)
