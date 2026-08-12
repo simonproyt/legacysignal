@@ -46,7 +46,12 @@ class MessageSender(
 
                 // If we didn't fetch prekeys, we assume we're just sending to device 1 (simplification)
                 // In a robust implementation, we would store all known device IDs.
-                val activeDeviceIds = preKeyResponse?.devices?.map { it.deviceId } ?: listOf(1)
+                val activeDeviceIds = if (preKeyResponse != null) {
+                    preKeyResponse.devices.map { it.deviceId }
+                } else {
+                    val sessions = store.getSubDeviceSessions(destinationUuid)
+                    if (sessions.isEmpty()) listOf(1) else sessions
+                }
                 
                 val pushMessages = mutableListOf<OutgoingPushMessage>()
                 
@@ -101,8 +106,13 @@ class MessageSender(
                         )
                         .build()
 
+                    val contentBytes = content.toByteArray()
+                    val paddedBytes = ByteArray(contentBytes.size + 1)
+                    System.arraycopy(contentBytes, 0, paddedBytes, 0, contentBytes.size)
+                    paddedBytes[contentBytes.size] = 0x80.toByte()
+
                     val cipher = SessionCipher(store, address)
-                    val ciphertextMsg = cipher.encrypt(content.toByteArray())
+                    val ciphertextMsg = cipher.encrypt(paddedBytes)
                     val msgType = if (ciphertextMsg.type == CiphertextMessage.PREKEY_TYPE) 3 else 1
                     
                     val remoteRegistrationId = try {

@@ -24,3 +24,4 @@ libsignal-client/java/android/build/
 libsignal-client/java/build/
 libsignal-client/java/.gradle/
 scratch/
+.kotlin/sessions/

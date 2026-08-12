@@ -29,30 +29,63 @@ class MessageReceiver(private val context: Context) {
         return null
     }
     
-    fun decryptMessage(envelope: SignalServiceProtos.Envelope): String {
+    data class DecryptedMessage(val senderId: String, val body: String)
+
+    fun decryptMessage(envelope: SignalServiceProtos.Envelope): DecryptedMessage {
+        var senderId = getSourceUuid(envelope)
+        val deviceId = if (envelope.hasSourceDeviceId()) envelope.sourceDeviceId else 1
+
         try {
-            val senderId = getSourceUuid(envelope)
-            if (senderId == null) {
-                return "[Missing Source ID]"
-            }
-
-            val deviceId = if (envelope.hasSourceDeviceId()) envelope.sourceDeviceId else 1
-            val address = SignalProtocolAddress(senderId, deviceId)
-            val cipher = SessionCipher(store, address)
-
             val plaintextBytes = when (envelope.type) {
                 SignalServiceProtos.Envelope.Type.PREKEY_MESSAGE -> {
+                    if (senderId == null) return DecryptedMessage("Unknown", "[Missing Source ID]")
+                    val address = SignalProtocolAddress(senderId, deviceId)
+                    val cipher = SessionCipher(store, address)
                     val message = PreKeySignalMessage(envelope.content.toByteArray())
                     cipher.decrypt(message)
                 }
                 SignalServiceProtos.Envelope.Type.DOUBLE_RATCHET -> {
+                    if (senderId == null) return DecryptedMessage("Unknown", "[Missing Source ID]")
+                    val address = SignalProtocolAddress(senderId, deviceId)
+                    val cipher = SessionCipher(store, address)
                     val message = SignalMessage(envelope.content.toByteArray())
                     cipher.decrypt(message)
                 }
+                SignalServiceProtos.Envelope.Type.UNIDENTIFIED_SENDER -> {
+                    val prefs = context.getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)
+                    val localUuidStr = prefs.getString("uuid", null) ?: UUID.randomUUID().toString()
+                    val localE164 = prefs.getString("phone_number", "")
+                    
+                    val validator = object : org.signal.libsignal.metadata.certificate.CertificateValidator(emptyList()) {
+                        override fun validate(
+                            certificate: org.signal.libsignal.metadata.certificate.SenderCertificate,
+                            validationTime: Long
+                        ) {
+                            // Trust all for legacy compatibility
+                        }
+                    }
+                    val sealedCipher = org.signal.libsignal.metadata.SealedSessionCipher(
+                        store,
+                        UUID.fromString(localUuidStr),
+                        localE164,
+                        1
+                    )
+                    
+                    val result = sealedCipher.decrypt(validator, envelope.content.toByteArray(), System.currentTimeMillis())
+                    senderId = result.senderUuid
+                    result.paddedMessage
+                }
+                SignalServiceProtos.Envelope.Type.SERVER_DELIVERY_RECEIPT -> {
+                    return DecryptedMessage(senderId ?: "Unknown", "[Receipt]")
+                }
                 else -> {
                     Log.w("MessageReceiver", "Unsupported message type: ${envelope.type}")
-                    return "[Unsupported Message Type]"
+                    return DecryptedMessage(senderId ?: "Unknown", "[Unsupported Message Type]")
                 }
+            }
+
+            if (senderId == null) {
+                return DecryptedMessage("Unknown", "[Missing Source ID]")
             }
 
             // Strip trailing zero padding and optional 0x80 padding byte
@@ -73,13 +106,16 @@ class MessageReceiver(private val context: Context) {
             }
 
             if (content?.hasDataMessage() == true) {
-                return content.dataMessage.body
+                if (content.dataMessage.body.isNullOrEmpty()) {
+                    return DecryptedMessage(senderId, "[No Body/Receipt]")
+                }
+                return DecryptedMessage(senderId, content.dataMessage.body)
             }
             
-            return "[No Data Message]"
+            return DecryptedMessage(senderId, "[No Data Message]")
         } catch (e: Exception) {
             Log.e("MessageReceiver", "Failed to decrypt message", e)
-            return "[Decryption Failed]"
+            return DecryptedMessage(senderId ?: "Unknown", "[Decryption Failed]")
         }
     }
 }

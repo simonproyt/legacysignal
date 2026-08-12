@@ -30,8 +30,13 @@ object BackgroundSyncManager {
         client?.onMessageReceived = { envelope ->
             scope.launch {
                 try {
-                    val plaintext = messageReceiver?.decryptMessage(envelope) ?: return@launch
-                    val senderId = messageReceiver?.getSourceUuid(envelope) ?: envelope.sourceServiceId
+                    val decrypted = messageReceiver?.decryptMessage(envelope) ?: return@launch
+                    if (decrypted.body == "[No Body/Receipt]" || decrypted.body == "[Receipt]") {
+                        Log.i("BackgroundSyncManager", "Skipping receipt from ${decrypted.senderId}")
+                        return@launch
+                    }
+                    val plaintext = decrypted.body
+                    val senderId = decrypted.senderId
                     
                     var senderThread = db.getThreadByRecipient(senderId)
                     if (senderThread == null) {

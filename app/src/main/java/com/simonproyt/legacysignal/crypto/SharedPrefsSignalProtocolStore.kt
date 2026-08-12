@@ -91,7 +91,20 @@ class SharedPrefsSignalProtocolStore(private val context: Context) : SignalProto
     }
 
     override fun getSubDeviceSessions(name: String?): MutableList<Int> {
-        return mutableListOf()
+        if (name == null) return mutableListOf()
+        val prefix = "session_${name}_"
+        val devices = mutableListOf<Int>()
+        for (key in prefs.all.keys) {
+            if (key.startsWith(prefix)) {
+                try {
+                    val deviceIdStr = key.substring(prefix.length)
+                    devices.add(deviceIdStr.toInt())
+                } catch (e: NumberFormatException) {
+                    // Ignore
+                }
+            }
+        }
+        return devices
     }
 
     override fun storeSession(address: SignalProtocolAddress?, record: SessionRecord?) {
