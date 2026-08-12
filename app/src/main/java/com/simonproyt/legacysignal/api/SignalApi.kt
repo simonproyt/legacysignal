@@ -167,7 +167,7 @@ interface SignalApi {
         @Body profile: SignalServiceProfileWrite
     ): Call<Void>
 
-    @GET("/v2/keys/{identifier}")
+    @GET("/v2/keys/{identifier}/*")
     fun getPreKeys(
         @Header("Authorization") auth: String,
         @Path("identifier") identifier: String

@@ -20,7 +20,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             """
             CREATE TABLE IF NOT EXISTS threads (
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                recipientNumber TEXT NOT NULL,
+                recipientNumber TEXT NOT NULL UNIQUE,
+                name TEXT,
                 lastMessageSnippet TEXT NOT NULL,
                 timestamp INTEGER NOT NULL,
                 unreadCount INTEGER NOT NULL
@@ -77,6 +78,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                     ThreadEntity(
                         id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
                         recipientNumber = cursor.getString(cursor.getColumnIndexOrThrow("recipientNumber")),
+                        name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
                         lastMessageSnippet = cursor.getString(cursor.getColumnIndexOrThrow("lastMessageSnippet")),
                         timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
                         unreadCount = cursor.getInt(cursor.getColumnIndexOrThrow("unreadCount"))
@@ -94,6 +96,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 thread = ThreadEntity(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
                     recipientNumber = cursor.getString(cursor.getColumnIndexOrThrow("recipientNumber")),
+                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
                     lastMessageSnippet = cursor.getString(cursor.getColumnIndexOrThrow("lastMessageSnippet")),
                     timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
                     unreadCount = cursor.getInt(cursor.getColumnIndexOrThrow("unreadCount"))
@@ -110,6 +113,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 thread = ThreadEntity(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
                     recipientNumber = cursor.getString(cursor.getColumnIndexOrThrow("recipientNumber")),
+                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
                     lastMessageSnippet = cursor.getString(cursor.getColumnIndexOrThrow("lastMessageSnippet")),
                     timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
                     unreadCount = cursor.getInt(cursor.getColumnIndexOrThrow("unreadCount"))
@@ -122,6 +126,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     suspend fun insertThread(thread: ThreadEntity): Long = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
             put("recipientNumber", thread.recipientNumber)
+            put("name", thread.name)
             put("lastMessageSnippet", thread.lastMessageSnippet)
             put("timestamp", thread.timestamp)
             put("unreadCount", thread.unreadCount)
@@ -134,6 +139,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
     suspend fun updateThread(thread: ThreadEntity) = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
             put("recipientNumber", thread.recipientNumber)
+            put("name", thread.name)
             put("lastMessageSnippet", thread.lastMessageSnippet)
             put("timestamp", thread.timestamp)
             put("unreadCount", thread.unreadCount)
@@ -194,7 +200,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         const val DATABASE_NAME = "signal_database"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
 
         @Volatile
         private var instance: DatabaseHelper? = null

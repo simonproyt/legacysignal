@@ -113,6 +113,34 @@ class ChatActivity : AppCompatActivity() {
         
     }
 
+    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+        menu.add(0, 1, 0, "Set Contact Name")
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        if (item.itemId == 1) {
+            val input = EditText(this)
+            input.hint = "Name"
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Set Contact Name")
+                .setView(input)
+                .setPositiveButton("Save") { _, _ ->
+                    val newName = input.text.toString()
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val existingThread = db.getThreadById(threadId)
+                        if (existingThread != null) {
+                            db.updateThread(existingThread.copy(name = newName.ifBlank { null }))
+                        }
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+            return true
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
     }

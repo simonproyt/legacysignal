@@ -25,7 +25,7 @@ class HomeActivity : AppCompatActivity() {
         
         BackgroundSyncManager.start(this)
 
-        val myUuid = CredentialsManager.getPassword(this) ?: "Unknown"
+        val myUuid = CredentialsManager.getPhoneNumber(this) ?: "Unknown"
         val tvMyUuid = findViewById<TextView>(R.id.tvMyUuid)
         tvMyUuid.text = "My UUID:\n$myUuid"
 

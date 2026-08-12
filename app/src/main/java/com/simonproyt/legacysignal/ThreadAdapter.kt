@@ -24,7 +24,7 @@ class ThreadAdapter(
 
     override fun onBindViewHolder(holder: ThreadViewHolder, position: Int) {
         val thread = threads[position]
-        holder.tvRecipient.text = thread.recipientNumber
+        holder.tvRecipient.text = if (!thread.name.isNullOrBlank()) thread.name else thread.recipientNumber
         holder.tvSnippet.text = thread.lastMessageSnippet
         holder.itemView.setOnClickListener {
             onThreadClick(thread)
