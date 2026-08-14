@@ -23,7 +23,12 @@ class HomeActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
         
-        BackgroundSyncManager.start(this)
+        val serviceIntent = Intent(this, SyncService::class.java)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
 
         val myName = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE).getString("my_given_name", "Unknown User")
         val myUuid = CredentialsManager.getPhoneNumber(this) ?: "Unknown"

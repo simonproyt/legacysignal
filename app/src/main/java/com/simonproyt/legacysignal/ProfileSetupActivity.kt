@@ -95,6 +95,14 @@ class ProfileSetupActivity : AppCompatActivity() {
 
                             val intent = Intent(this@ProfileSetupActivity, HomeActivity::class.java)
                             startActivity(intent)
+                            
+                            val serviceIntent = Intent(this@ProfileSetupActivity, SyncService::class.java)
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                startForegroundService(serviceIntent)
+                            } else {
+                                startService(serviceIntent)
+                            }
+                            
                             finish()
                         } else {
                             android.util.Log.e("ProfileSetupActivity", "Profile upload failed: ${response.code()}")

@@ -7,6 +7,7 @@
   - reciving messages
   - replying to messages
   - sending the name after registration and showing contact names
+  - background notifications
 - Whats not working:
 
 # Bugs

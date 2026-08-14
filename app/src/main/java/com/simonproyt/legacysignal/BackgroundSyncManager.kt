@@ -16,6 +16,7 @@ object BackgroundSyncManager {
     private var client: SignalClient? = null
     private val scope = CoroutineScope(Dispatchers.IO)
     private var messageReceiver: MessageReceiver? = null
+    private var appContext: Context? = null
     
     fun start(context: Context) {
         if (isRunning) return
@@ -23,9 +24,10 @@ object BackgroundSyncManager {
         val pass = CredentialsManager.getPassword(context) ?: return
 
         Log.i("BackgroundSyncManager", "Starting background sync for $phone")
-        client = SignalClient(context.applicationContext, phone, pass)
-        val db = DatabaseHelper.getInstance(context.applicationContext)
-        messageReceiver = MessageReceiver(context.applicationContext)
+        appContext = context.applicationContext
+        client = SignalClient(appContext!!, phone, pass)
+        val db = DatabaseHelper.getInstance(appContext!!)
+        messageReceiver = MessageReceiver(appContext!!)
         
         client?.onMessageReceived = { envelope ->
             scope.launch {
@@ -113,6 +115,10 @@ object BackgroundSyncManager {
                     }
                     db.insertMessage(MessageEntity(threadId = senderThread!!.id, senderId = senderId, body = plaintext, isOutgoing = false, timestamp = System.currentTimeMillis()))
                     Log.i("BackgroundSyncManager", "Saved message from $senderId")
+                    
+                    appContext?.let { ctx ->
+                        showNotification(ctx, contactName ?: "Unknown", plaintext, senderThread.id, senderId)
+                    }
                 } catch (e: Exception) {
                     Log.e("BackgroundSyncManager", "Failed to process message", e)
                 }
@@ -124,5 +130,32 @@ object BackgroundSyncManager {
     
     fun getClient(): SignalClient? {
         return client
+    }
+    
+    private fun showNotification(context: Context, senderName: String, messageText: String, threadId: Long, recipientId: String) {
+        val intent = android.content.Intent(context, ChatActivity::class.java).apply {
+            putExtra("THREAD_ID", threadId)
+            putExtra("RECIPIENT_ID", recipientId)
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        
+        val pFlags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        } else {
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(context, threadId.toInt(), intent, pFlags)
+
+        val builder = androidx.core.app.NotificationCompat.Builder(context, "legacy_signal_messages")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(senderName)
+            .setContentText(messageText)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setDefaults(android.app.Notification.DEFAULT_ALL)
+
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        notificationManager.notify(threadId.toInt(), builder.build())
     }
 }
