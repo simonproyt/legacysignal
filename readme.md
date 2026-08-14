@@ -5,14 +5,13 @@
   - sending the actual sms code (finally after 3 and a half hours of development hell its working)
   - registration to signal
   - reciving messages
+  - replying to messages
+  - sending the name after registration and showing contact names
 - Whats not working:
-  - replying to messages i guess
-  - contacts and not just showing user ids as names
 
 # Bugs
 
-- becuase the app isnt implamented yet there is nothing to be bugged out (yet)
-- all fixed curently i gueess
+- nothing curently that i found
 
 # Workarounds that i used to make this work on old android
 
