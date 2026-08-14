@@ -132,13 +132,21 @@ class MessageSender(
                     }
 
                     // Create Content proto
+                    val dataMessageBuilder = com.simonproyt.legacysignal.api.push.SignalServiceProtos.DataMessage.newBuilder()
+                        .setTimestamp(timestamp)
+                        .setBody(messageBody)
+                        
+                    // Retrieve and append profile key
+                    val profileKeyBytes = com.simonproyt.legacysignal.CredentialsManager.getProfileKey(store.context)
+                    if (profileKeyBytes != null) {
+                        Log.i("MessageSender", "Attaching ProfileKey of size ${profileKeyBytes.size} to message")
+                        dataMessageBuilder.setProfileKey(com.google.protobuf.ByteString.copyFrom(profileKeyBytes))
+                    } else {
+                        Log.w("MessageSender", "ProfileKey is NULL, NOT attaching to message")
+                    }
+                    
                     val content = com.simonproyt.legacysignal.api.push.SignalServiceProtos.Content.newBuilder()
-                        .setDataMessage(
-                            com.simonproyt.legacysignal.api.push.SignalServiceProtos.DataMessage.newBuilder()
-                                .setTimestamp(timestamp)
-                                .setBody(messageBody)
-                                .build()
-                        )
+                        .setDataMessage(dataMessageBuilder.build())
                         .build()
 
                     val contentBytes = content.toByteArray()

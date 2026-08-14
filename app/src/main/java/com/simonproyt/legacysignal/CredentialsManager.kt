@@ -86,6 +86,19 @@ object CredentialsManager {
             .apply()
     }
 
+    fun saveProfileKey(context: Context, profileKeyBase64: String) {
+        getPrefs(context).edit()
+            .putString("PROFILE_KEY", encrypt(context, profileKeyBase64))
+            .apply()
+    }
+
+    fun getProfileKey(context: Context): ByteArray? {
+        val enc = getPrefs(context).getString("PROFILE_KEY", null) ?: return null
+        return try { 
+            Base64.decode(decrypt(context, enc), Base64.NO_WRAP) 
+        } catch (e: Exception) { null }
+    }
+
     fun getPhoneNumber(context: Context): String? {
         val enc = getPrefs(context).getString(KEY_PHONE_NUMBER, null) ?: return null
         return try { decrypt(context, enc) } catch (e: Exception) { null }

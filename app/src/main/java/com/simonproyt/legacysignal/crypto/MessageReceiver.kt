@@ -29,7 +29,7 @@ class MessageReceiver(private val context: Context) {
         return null
     }
     
-    data class DecryptedMessage(val senderId: String, val body: String)
+    data class DecryptedMessage(val senderId: String, val body: String, val profileKey: ByteArray? = null)
 
     fun decryptMessage(envelope: SignalServiceProtos.Envelope): DecryptedMessage {
         var senderId = getSourceUuid(envelope)
@@ -105,14 +105,23 @@ class MessageReceiver(private val context: Context) {
                 content = SignalServiceProtos.Content.parseFrom(plaintextBytes)
             }
 
+            var profileKey: ByteArray? = null
             if (content?.hasDataMessage() == true) {
-                if (content.dataMessage.body.isNullOrEmpty()) {
-                    return DecryptedMessage(senderId, "[No Body/Receipt]")
+                if (content.dataMessage.hasProfileKey()) {
+                    val keyBytes = content.dataMessage.profileKey.toByteArray()
+                    Log.i("MessageReceiver", "Parsed profile key from $senderId, size: ${keyBytes.size}")
+                    if (keyBytes.size == 32) profileKey = keyBytes
+                } else {
+                    Log.i("MessageReceiver", "No profile key found in DataMessage from $senderId")
                 }
-                return DecryptedMessage(senderId, content.dataMessage.body)
+                
+                if (content.dataMessage.body.isNullOrEmpty()) {
+                    return DecryptedMessage(senderId, "[No Body/Receipt]", profileKey)
+                }
+                return DecryptedMessage(senderId, content.dataMessage.body, profileKey)
             }
             
-            return DecryptedMessage(senderId, "[No Data Message]")
+            return DecryptedMessage(senderId, "[No Data Message]", profileKey)
         } catch (e: Exception) {
             Log.e("MessageReceiver", "Failed to decrypt message", e)
             return DecryptedMessage(senderId ?: "Unknown", "[Decryption Failed]")

@@ -30,24 +30,45 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         )
         db.execSQL(
             """
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                threadId INTEGER NOT NULL,
-                senderId TEXT NOT NULL,
-                body TEXT NOT NULL,
-                timestamp INTEGER NOT NULL,
-                isOutgoing INTEGER NOT NULL,
-                FOREIGN KEY(threadId) REFERENCES threads(id) ON DELETE CASCADE
+            CREATE TABLE IF NOT EXISTS $TABLE_MESSAGES (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id INTEGER,
+                sender_id TEXT,
+                text TEXT,
+                timestamp INTEGER,
+                is_outgoing INTEGER,
+                status INTEGER,
+                FOREIGN KEY(thread_id) REFERENCES $TABLE_THREADS(id)
             )
             """.trimIndent()
         )
-        db.execSQL("CREATE INDEX IF NOT EXISTS index_messages_threadId ON messages(threadId)")
+        
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_CONTACTS (
+                uuid TEXT PRIMARY KEY,
+                name TEXT,
+                about TEXT,
+                profile_key TEXT
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_messages_threadId ON $TABLE_MESSAGES(thread_id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS messages")
-        db.execSQL("DROP TABLE IF EXISTS threads")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL(
+                """
+                CREATE TABLE $TABLE_CONTACTS (
+                    uuid TEXT PRIMARY KEY,
+                    name TEXT,
+                    about TEXT,
+                    profile_key TEXT
+                )
+                """.trimIndent()
+            )
+        }
     }
 
     override fun onOpen(db: SQLiteDatabase) {
@@ -72,7 +93,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     private fun queryAllThreads(): List<ThreadEntity> {
         val list = mutableListOf<ThreadEntity>()
-        readableDatabase.rawQuery("SELECT * FROM threads ORDER BY timestamp DESC", null).use { cursor ->
+        readableDatabase.rawQuery("SELECT * FROM $TABLE_THREADS ORDER BY timestamp DESC", null).use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(
                     ThreadEntity(
@@ -91,7 +112,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     suspend fun getThreadByRecipient(recipientNumber: String): ThreadEntity? = withContext(Dispatchers.IO) {
         var thread: ThreadEntity? = null
-        readableDatabase.rawQuery("SELECT * FROM threads WHERE recipientNumber = ? LIMIT 1", arrayOf(recipientNumber)).use { cursor ->
+        readableDatabase.rawQuery("SELECT * FROM $TABLE_THREADS WHERE recipientNumber = ? LIMIT 1", arrayOf(recipientNumber)).use { cursor ->
             if (cursor.moveToFirst()) {
                 thread = ThreadEntity(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
@@ -108,7 +129,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     suspend fun getThreadById(id: Long): ThreadEntity? = withContext(Dispatchers.IO) {
         var thread: ThreadEntity? = null
-        readableDatabase.rawQuery("SELECT * FROM threads WHERE id = ? LIMIT 1", arrayOf(id.toString())).use { cursor ->
+        readableDatabase.rawQuery("SELECT * FROM $TABLE_THREADS WHERE id = ? LIMIT 1", arrayOf(id.toString())).use { cursor ->
             if (cursor.moveToFirst()) {
                 thread = ThreadEntity(
                     id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
@@ -131,7 +152,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             put("timestamp", thread.timestamp)
             put("unreadCount", thread.unreadCount)
         }
-        val id = writableDatabase.insertWithOnConflict("threads", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        val id = writableDatabase.insertWithOnConflict(TABLE_THREADS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
         notifyDbChanged()
         id
     }
@@ -144,7 +165,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             put("timestamp", thread.timestamp)
             put("unreadCount", thread.unreadCount)
         }
-        writableDatabase.update("threads", values, "id = ?", arrayOf(thread.id.toString()))
+        writableDatabase.update(TABLE_THREADS, values, "id = ?", arrayOf(thread.id.toString()))
         notifyDbChanged()
     }
 
@@ -153,7 +174,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             put("lastMessageSnippet", snippet)
             put("timestamp", timestamp)
         }
-        writableDatabase.update("threads", values, "id = ?", arrayOf(id.toString()))
+        writableDatabase.update(TABLE_THREADS, values, "id = ?", arrayOf(id.toString()))
         notifyDbChanged()
     }
 
@@ -168,16 +189,16 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     private fun queryMessagesForThread(threadId: Long): List<MessageEntity> {
         val list = mutableListOf<MessageEntity>()
-        readableDatabase.rawQuery("SELECT * FROM messages WHERE threadId = ? ORDER BY timestamp ASC", arrayOf(threadId.toString())).use { cursor ->
+        readableDatabase.rawQuery("SELECT * FROM $TABLE_MESSAGES WHERE thread_id = ? ORDER BY timestamp ASC", arrayOf(threadId.toString())).use { cursor ->
             while (cursor.moveToNext()) {
                 list.add(
                     MessageEntity(
                         id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
-                        threadId = cursor.getLong(cursor.getColumnIndexOrThrow("threadId")),
-                        senderId = cursor.getString(cursor.getColumnIndexOrThrow("senderId")),
-                        body = cursor.getString(cursor.getColumnIndexOrThrow("body")),
+                        threadId = cursor.getLong(cursor.getColumnIndexOrThrow("thread_id")),
+                        senderId = cursor.getString(cursor.getColumnIndexOrThrow("sender_id")),
+                        body = cursor.getString(cursor.getColumnIndexOrThrow("text")),
                         timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                        isOutgoing = cursor.getInt(cursor.getColumnIndexOrThrow("isOutgoing")) == 1
+                        isOutgoing = cursor.getInt(cursor.getColumnIndexOrThrow("is_outgoing")) == 1
                     )
                 )
             }
@@ -187,25 +208,52 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     suspend fun insertMessage(message: MessageEntity): Long = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
-            put("threadId", message.threadId)
-            put("senderId", message.senderId)
-            put("body", message.body)
+            put("thread_id", message.threadId)
+            put("sender_id", message.senderId)
+            put("text", message.body)
             put("timestamp", message.timestamp)
-            put("isOutgoing", if (message.isOutgoing) 1 else 0)
+            put("is_outgoing", if (message.isOutgoing) 1 else 0)
         }
-        val id = writableDatabase.insert("messages", null, values)
+        val id = writableDatabase.insert(TABLE_MESSAGES, null, values)
         notifyDbChanged()
         id
     }
 
-    suspend fun deleteMessage(id: Long) = withContext(Dispatchers.IO) {
-        writableDatabase.delete("messages", "id = ?", arrayOf(id.toString()))
+    suspend fun deleteMessage(id: Long) {
+        val db = writableDatabase
+        db.delete(TABLE_MESSAGES, "id = ?", arrayOf(id.toString()))
         notifyDbChanged()
+    }
+    
+    fun saveContact(uuid: String, name: String?, about: String?, profileKey: String?) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("uuid", uuid)
+            if (name != null) put("name", name)
+            if (about != null) put("about", about)
+            if (profileKey != null) put("profile_key", profileKey)
+        }
+        db.insertWithOnConflict(TABLE_CONTACTS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+    
+    fun getContactName(uuid: String): String? {
+        val db = readableDatabase
+        val cursor = db.query(TABLE_CONTACTS, arrayOf("name"), "uuid = ?", arrayOf(uuid), null, null, null)
+        var name: String? = null
+        if (cursor.moveToFirst()) {
+            name = cursor.getString(0)
+        }
+        cursor.close()
+        return name
     }
 
     companion object {
-        const val DATABASE_NAME = "signal_database"
-        const val DATABASE_VERSION = 2
+        private const val DATABASE_NAME = "signal_db"
+        private const val DATABASE_VERSION = 2
+
+        private const val TABLE_THREADS = "threads"
+        private const val TABLE_MESSAGES = "messages"
+        private const val TABLE_CONTACTS = "contacts"
 
         @Volatile
         private var instance: DatabaseHelper? = null

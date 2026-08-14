@@ -20,7 +20,7 @@ import org.signal.libsignal.protocol.groups.state.SenderKeyRecord
 import org.signal.libsignal.protocol.ecc.ECPublicKey
 import java.util.UUID
 
-class SharedPrefsSignalProtocolStore(private val context: Context) : SignalProtocolStore {
+class SharedPrefsSignalProtocolStore(val context: Context) : SignalProtocolStore {
     private val prefs: SharedPreferences = context.getSharedPreferences("signal_protocol_store", Context.MODE_PRIVATE)
 
     override fun getIdentityKeyPair(): IdentityKeyPair {

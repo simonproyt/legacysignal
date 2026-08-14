@@ -20,5 +20,21 @@ class ExampleInstrumentedTest {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("com.simonproyt.legacysignal", appContext.packageName)
+        
+        val phone = CredentialsManager.getPhoneNumber(appContext) ?: return
+        val pass = CredentialsManager.getPassword(appContext) ?: return
+        
+        val client = com.simonproyt.legacysignal.api.SignalClient(appContext, phone, pass)
+        val profileAuth = android.util.Base64.encodeToString(("$phone:$pass").toByteArray(), android.util.Base64.NO_WRAP)
+        val senderId = CredentialsManager.getAci(appContext) ?: ""
+        val response = client.api.getProfile("Basic $profileAuth", senderId).execute()
+        
+        android.util.Log.e("ProfileTest", "Response code: ${response.code()}")
+        if (response.isSuccessful && response.body() != null) {
+            val jsonString = response.body()!!.string()
+            android.util.Log.e("ProfileTest", "Raw JSON: $jsonString")
+        } else {
+            android.util.Log.e("ProfileTest", "Error: ${response.errorBody()?.string()}")
+        }
     }
 }

@@ -3,8 +3,8 @@ package com.simonproyt.legacysignal.data
 data class ThreadEntity(
     val id: Long = 0,
     val recipientNumber: String,
-    val name: String? = null,
-    val lastMessageSnippet: String = "",
-    val timestamp: Long = 0,
-    val unreadCount: Int = 0
+    var name: String? = null,
+    var lastMessageSnippet: String = "",
+    var timestamp: Long = 0,
+    var unreadCount: Int = 0
 )

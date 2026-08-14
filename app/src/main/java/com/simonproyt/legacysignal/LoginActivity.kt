@@ -20,7 +20,7 @@ import com.simonproyt.legacysignal.api.VerifyResponse
 class LoginActivity : AppCompatActivity() {
 
     private var currentSessionId: String? = null
-    
+
     private val signalClient: SignalClient by lazy {
         SignalClient(this, "", "")
     }
@@ -183,6 +183,7 @@ class LoginActivity : AppCompatActivity() {
                                             android.util.Base64.encodeToString(aciKyberRecord.serialize(), android.util.Base64.NO_WRAP),
                                             android.util.Base64.encodeToString(pniKyberRecord.serialize(), android.util.Base64.NO_WRAP)
                                         )
+                                        CredentialsManager.saveProfileKey(this@LoginActivity, android.util.Base64.encodeToString(profileKeyBytes, android.util.Base64.NO_WRAP))
 
                                         val store = com.simonproyt.legacysignal.crypto.SharedPrefsSignalProtocolStore(this@LoginActivity)
                                         store.saveIdentityKeyPair(aciIdentityKeyPair)
@@ -245,44 +246,13 @@ class LoginActivity : AppCompatActivity() {
                                                         override fun onResponse(call: Call<Void>, response4: Response<Void>) {
                                                             if (response4.isSuccessful) {
                                                                 Toast.makeText(this@LoginActivity, "Uploading Profile...", Toast.LENGTH_SHORT).show()
-
-                                                                val profileKey = org.signal.libsignal.zkgroup.profiles.ProfileKey(profileKeyBytes)
-                                                                val profileCipher = com.simonproyt.legacysignal.api.crypto.ProfileCipher(profileKey)
-
-                                                                val aciObj = org.signal.libsignal.protocol.ServiceId.Aci.parseFromString(uuid)
-                                                                val version = profileKey.getProfileKeyVersion(aciObj)
-                                                                val commitment = profileKey.getCommitment(aciObj)
-
-                                                                val profileWrite = com.simonproyt.legacysignal.api.SignalServiceProfileWrite(
-                                                                    version = version.serialize(),
-                                                                    name = android.util.Base64.encodeToString(profileCipher.encryptString("Emulator User", 53), android.util.Base64.NO_WRAP),
-                                                                    about = android.util.Base64.encodeToString(profileCipher.encryptString("Hello Signal!", 128), android.util.Base64.NO_WRAP),
-                                                                    aboutEmoji = android.util.Base64.encodeToString(profileCipher.encryptString("", 32), android.util.Base64.NO_WRAP),
-                                                                    paymentAddress = null,
-                                                                    phoneNumberSharing = android.util.Base64.encodeToString(profileCipher.encryptBoolean(true), android.util.Base64.NO_WRAP),
-                                                                    avatar = false,
-                                                                    sameAvatar = false,
-                                                                    commitment = android.util.Base64.encodeToString(commitment.serialize(), android.util.Base64.NO_WRAP),
-                                                                    badgeIds = emptyList()
-                                                                )
-
-                                                                signalClient.api.uploadProfile(uuidAuth, profileWrite).enqueue(object : Callback<Void> {
-                                                                    override fun onResponse(call: Call<Void>, response5: Response<Void>) {
-                                                                        if (response5.isSuccessful) {
-                                                                            Toast.makeText(this@LoginActivity, "Registered successfully!", Toast.LENGTH_LONG).show()
-                                                                            startActivity(Intent(this@LoginActivity, HomeActivity::class.java))
-                                                                            finish()
-                                                                        } else {
-                                                                            btnLogin.isEnabled = true
-                                                                            Toast.makeText(this@LoginActivity, "Profile upload failed: ${response5.code()}", Toast.LENGTH_SHORT).show()
-                                                                            Log.e("LoginActivity", "Profile upload failed: ${response5.code()} ${response5.message()}")
-                                                                        }
-                                                                    }
-                                                                    override fun onFailure(call: Call<Void>, t: Throwable) {
-                                                                        btnLogin.isEnabled = true
-                                                                        Toast.makeText(this@LoginActivity, "Network error during Profile upload", Toast.LENGTH_SHORT).show()
-                                                                    }
-                                                                })
+                                                                val setupIntent = Intent(this@LoginActivity, ProfileSetupActivity::class.java).apply {
+                                                                    putExtra("UUID", uuid)
+                                                                    putExtra("AUTH", uuidAuth)
+                                                                    putExtra("PROFILE_KEY_BYTES", android.util.Base64.encodeToString(profileKeyBytes, android.util.Base64.NO_WRAP))
+                                                                }
+                                                                startActivity(setupIntent)
+                                                                finish()
                                                             } else {
                                                                 btnLogin.isEnabled = true
                                                                 Toast.makeText(this@LoginActivity, "PNI PreKey upload failed: ${response4.code()}", Toast.LENGTH_SHORT).show()
@@ -340,7 +310,7 @@ class LoginActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         outState.putString("currentSessionId", currentSessionId)
     }
-    
+
     private fun requestSms(phone: String, viewFlipper: android.widget.ViewFlipper? = null, tvCodeSentTo: android.widget.TextView? = null) {
         signalClient.api.requestSmsCode(currentSessionId!!, CodeRequest()).enqueue(object : Callback<Void> {
             override fun onResponse(call: Call<Void>, response2: Response<Void>) {

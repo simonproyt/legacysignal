@@ -25,9 +25,22 @@ class HomeActivity : AppCompatActivity() {
         
         BackgroundSyncManager.start(this)
 
+        val myName = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE).getString("my_given_name", "Unknown User")
         val myUuid = CredentialsManager.getPhoneNumber(this) ?: "Unknown"
         val tvMyUuid = findViewById<TextView>(R.id.tvMyUuid)
-        tvMyUuid.text = "My UUID:\n$myUuid"
+        
+        var uuidVisible = false
+        
+        fun updateProfileText() {
+            val uuidDisplay = if (uuidVisible) myUuid else "(Tap to show UUID)"
+            tvMyUuid.text = "My Profile:\n$myName\n$uuidDisplay"
+        }
+        
+        updateProfileText()
+        tvMyUuid.setOnClickListener {
+            uuidVisible = !uuidVisible
+            updateProfileText()
+        }
 
         threadAdapter = ThreadAdapter(emptyList()) { thread ->
             val intent = Intent(this, ChatActivity::class.java).apply {

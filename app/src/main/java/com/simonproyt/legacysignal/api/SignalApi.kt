@@ -122,6 +122,15 @@ data class DeliveryCertificateResponse(
     val certificate: String
 )
 
+data class ProfileResponse(
+    val name: String?,
+    val about: String?,
+    val aboutEmoji: String?,
+    val avatar: String?,
+    val identityKey: String?,
+    val capabilities: Map<String, Boolean>?
+)
+
 interface SignalApi {
     
     @POST("/v1/verification/session")
@@ -182,6 +191,19 @@ interface SignalApi {
         @Header("Authorization") authHeader: String,
         @Query("includeDirectories") includeDirectories: Boolean = true
     ): Call<DeliveryCertificateResponse>
+
+    @GET("/v1/profile/{uuid}/{version}")
+    fun getProfile(
+        @Header("Authorization") authHeader: String,
+        @Path("uuid") uuid: String,
+        @Path("version") version: String
+    ): Call<okhttp3.ResponseBody>
+
+    @GET("/v1/profile/{uuid}")
+    fun getProfileUnversioned(
+        @Header("Authorization") authHeader: String,
+        @Path("uuid") uuid: String
+    ): Call<okhttp3.ResponseBody>
 
     @PUT("/v1/messages/{destination}")
     fun sendMessage(

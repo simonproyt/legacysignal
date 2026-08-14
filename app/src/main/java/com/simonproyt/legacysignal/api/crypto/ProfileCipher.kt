@@ -40,6 +40,33 @@ class ProfileCipher(private val key: ProfileKey) {
         return encrypt(value, 1)
     }
 
+    fun decrypt(input: ByteArray): ByteArray {
+        val nonce = ByteArray(12)
+        System.arraycopy(input, 0, nonce, 0, 12)
+        
+        val cipher = GCMBlockCipher(AESEngine())
+        val params = AEADParameters(KeyParameter(key.serialize()), 128, nonce)
+        cipher.init(false, params)
+        
+        val ciphertextLen = input.size - 12
+        val decrypted = ByteArray(cipher.getOutputSize(ciphertextLen))
+        val len = cipher.processBytes(input, 12, ciphertextLen, decrypted, 0)
+        val finalLen = cipher.doFinal(decrypted, len)
+        
+        val result = ByteArray(len + finalLen)
+        System.arraycopy(decrypted, 0, result, 0, len + finalLen)
+        
+        // Remove padding (find the last non-zero byte)
+        var unpaddedLen = result.size
+        while (unpaddedLen > 0 && result[unpaddedLen - 1] == 0.toByte()) {
+            unpaddedLen--
+        }
+        
+        val unpadded = ByteArray(unpaddedLen)
+        System.arraycopy(result, 0, unpadded, 0, unpaddedLen)
+        return unpadded
+    }
+
     companion object {
         fun deriveUnidentifiedAccessKey(profileKey: ByteArray): ByteArray {
             val nonce = ByteArray(12)
