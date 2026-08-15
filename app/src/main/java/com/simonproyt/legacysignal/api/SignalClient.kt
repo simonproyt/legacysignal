@@ -23,6 +23,8 @@ class SignalClient(private val context: Context, private val phoneNumber: String
             chain.proceed(requestWithUserAgent)
         }
         val builder = OkHttpClient.Builder()
+            .pingInterval(20, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .addInterceptor(userAgentInterceptor)
             .addInterceptor(logging)
         ConscryptHelper.configureOkHttp(context, builder)
@@ -39,6 +41,7 @@ class SignalClient(private val context: Context, private val phoneNumber: String
     }
 
     var onMessageReceived: ((com.simonproyt.legacysignal.api.push.SignalServiceProtos.Envelope) -> Unit)? = null
+    var onStateChanged: ((ConnectionState) -> Unit)? = null
 
     val webSocket: SignalWebSocket by lazy {
         SignalWebSocket(
@@ -47,6 +50,9 @@ class SignalClient(private val context: Context, private val phoneNumber: String
             authHeader = authHeader,
             onMessageReceived = { envelope ->
                 onMessageReceived?.invoke(envelope)
+            },
+            onStateChanged = { state ->
+                onStateChanged?.invoke(state)
             }
         )
     }

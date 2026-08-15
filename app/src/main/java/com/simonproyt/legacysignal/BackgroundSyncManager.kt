@@ -9,7 +9,11 @@ import com.simonproyt.legacysignal.data.MessageEntity
 import com.simonproyt.legacysignal.data.ThreadEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import com.simonproyt.legacysignal.api.ConnectionState
 
 object BackgroundSyncManager {
     private var isRunning = false
@@ -18,16 +22,39 @@ object BackgroundSyncManager {
     private var messageReceiver: MessageReceiver? = null
     private var appContext: Context? = null
     
+    private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    
+    private val _statusText = MutableStateFlow("Offline")
+    val statusText: StateFlow<String> = _statusText.asStateFlow()
+    
     fun start(context: Context) {
-        if (isRunning) return
         val phone = CredentialsManager.getPhoneNumber(context) ?: return
         val pass = CredentialsManager.getPassword(context) ?: return
+
+        if (isRunning && client != null) {
+            if (_connectionState.value == ConnectionState.DISCONNECTED) {
+                Log.i("BackgroundSyncManager", "Already running but disconnected, reconnecting...")
+                client?.connect()
+            }
+            return
+        }
 
         Log.i("BackgroundSyncManager", "Starting background sync for $phone")
         appContext = context.applicationContext
         client = SignalClient(appContext!!, phone, pass)
         val db = DatabaseHelper.getInstance(appContext!!)
         messageReceiver = MessageReceiver(appContext!!)
+        
+        client?.onStateChanged = { state ->
+            _connectionState.value = state
+            val interval = appContext?.getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)?.getInt("sync_interval_mins", 0) ?: 0
+            _statusText.value = when (state) {
+                ConnectionState.CONNECTED -> "● Connected"
+                ConnectionState.CONNECTING -> "Connecting..."
+                ConnectionState.DISCONNECTED -> if (interval > 0) "🕒 Polling (${interval}m)" else "● Offline"
+            }
+        }
         
         client?.onMessageReceived = { envelope ->
             scope.launch {
@@ -127,25 +154,36 @@ object BackgroundSyncManager {
         client?.connect()
         isRunning = true
     }
-    
+            
     fun getClient(): SignalClient? {
         return client
     }
-    
+
+    fun stop() {
+        if (!isRunning) return
+        Log.i("BackgroundSyncManager", "Stopping background sync")
+        client?.onMessageReceived = null
+        client?.disconnect()
+        isRunning = false
+        _connectionState.value = ConnectionState.DISCONNECTED
+        val interval = appContext?.getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)?.getInt("sync_interval_mins", 0) ?: 0
+        _statusText.value = if (interval > 0) "🕒 Polling (${interval}m)" else "● Offline"
+    }
+
     private fun showNotification(context: Context, senderName: String, messageText: String, threadId: Long, recipientId: String) {
         val intent = android.content.Intent(context, ChatActivity::class.java).apply {
             putExtra("THREAD_ID", threadId)
             putExtra("RECIPIENT_ID", recipientId)
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
-        
+
         val pFlags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
         } else {
             android.app.PendingIntent.FLAG_UPDATE_CURRENT
         }
         val pendingIntent = android.app.PendingIntent.getActivity(context, threadId.toInt(), intent, pFlags)
-
+    
         val builder = androidx.core.app.NotificationCompat.Builder(context, "legacy_signal_messages")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(senderName)

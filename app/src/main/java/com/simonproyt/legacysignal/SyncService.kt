@@ -35,7 +35,45 @@ class SyncService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val prefs = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE)
+        val intervalMins = prefs.getInt("sync_interval_mins", 0)
+
         BackgroundSyncManager.start(this)
+        
+        if (intervalMins > 0) {
+            // Polling mode: wait 10 seconds for messages to arrive, then stop
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                BackgroundSyncManager.stop()
+                
+                // Schedule next poll
+                val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+                val receiverIntent = Intent(this, SyncReceiver::class.java)
+                val pFlags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                } else {
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                }
+                val pendingIntent = android.app.PendingIntent.getBroadcast(this, 0, receiverIntent, pFlags)
+                
+                val triggerTime = System.currentTimeMillis() + (intervalMins * 60 * 1000L)
+                alarmManager.set(android.app.AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                
+                // Stop service (removes foreground notification and saves battery)
+                stopSelf()
+            }, 10000) // 10 seconds
+        } else {
+            // Persistent mode: cancel any existing alarms
+            val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+            val receiverIntent = Intent(this, SyncReceiver::class.java)
+            val pFlags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            } else {
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = android.app.PendingIntent.getBroadcast(this, 0, receiverIntent, pFlags)
+            alarmManager.cancel(pendingIntent)
+        }
+
         return START_STICKY
     }
 

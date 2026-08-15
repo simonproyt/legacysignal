@@ -65,6 +65,13 @@ class ChatActivity : AppCompatActivity() {
         val authHeader = "Basic " + Base64.encodeToString("$phone:$pass".toByteArray(), Base64.NO_WRAP)
         val messageSender = MessageSender(signalClient.api, SharedPrefsSignalProtocolStore(this), authHeader)
 
+        // Update connection status in subtitle
+        lifecycleScope.launch {
+            BackgroundSyncManager.statusText.collectLatest { status ->
+                supportActionBar?.subtitle = status
+            }
+        }
+
         // Load existing messages
         lifecycleScope.launch {
             if (threadId == 0L && recipientId.isNotEmpty()) {
@@ -88,7 +95,15 @@ class ChatActivity : AppCompatActivity() {
 
                 messagesList.clear()
                 msgs.forEach { msg ->
-                    messagesList.add(ChatMessage(msg.id, if (msg.isOutgoing) "Me" else displayName, msg.body))
+                    messagesList.add(
+                        ChatMessage(
+                            id = msg.id,
+                            sender = if (msg.isOutgoing) "Me" else displayName,
+                            text = msg.body,
+                            timestamp = msg.timestamp,
+                            isOutgoing = msg.isOutgoing
+                        )
+                    )
                 }
                 messageAdapter.notifyDataSetChanged()
                 if (messagesList.isNotEmpty()) {
@@ -121,7 +136,15 @@ class ChatActivity : AppCompatActivity() {
                         )
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
-                            messageAdapter.addMessage(ChatMessage(-1L, "System", "Failed to send: ${e.message}"))
+                            messageAdapter.addMessage(
+                                ChatMessage(
+                                    id = -1L,
+                                    sender = "System",
+                                    text = "Failed to send: ${e.message}",
+                                    timestamp = System.currentTimeMillis(),
+                                    isOutgoing = false
+                                )
+                            )
                             rvMessages.scrollToPosition(messagesList.size - 1)
                         }
                     }
@@ -157,6 +180,14 @@ class ChatActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE)
+        if (prefs.getInt("sync_interval_mins", 0) == 0) {
+            BackgroundSyncManager.start(this)
+        }
     }
 
     override fun onDestroy() {

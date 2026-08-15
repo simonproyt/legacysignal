@@ -56,6 +56,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         val rvThreads = findViewById<RecyclerView>(R.id.rvThreads)
+        val llEmptyState = findViewById<android.view.View>(R.id.llEmptyState)
         rvThreads.layoutManager = LinearLayoutManager(this)
         rvThreads.adapter = threadAdapter
 
@@ -65,10 +66,80 @@ class HomeActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            db.getAllThreads().collectLatest { threads ->
-                threadAdapter.updateThreads(threads)
+            BackgroundSyncManager.statusText.collectLatest { status ->
+                supportActionBar?.subtitle = status
             }
         }
+
+        lifecycleScope.launch {
+            db.getAllThreads().collectLatest { threads ->
+                threadAdapter.updateThreads(threads)
+                if (threads.isEmpty()) {
+                    llEmptyState.visibility = android.view.View.VISIBLE
+                    rvThreads.visibility = android.view.View.GONE
+                } else {
+                    llEmptyState.visibility = android.view.View.GONE
+                    rvThreads.visibility = android.view.View.VISIBLE
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val prefs = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE)
+        if (prefs.getInt("sync_interval_mins", 0) == 0) {
+            val serviceIntent = Intent(this, SyncService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            BackgroundSyncManager.start(this)
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: android.view.Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_home, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                showSyncSettingsDialog()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun showSyncSettingsDialog() {
+        val prefs = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE)
+        val currentInterval = prefs.getInt("sync_interval_mins", 0)
+        
+        val options = arrayOf("Persistent Connection (High Battery)", "Poll every 15 minutes", "Poll every 30 minutes", "Poll every 1 hour")
+        val values = intArrayOf(0, 15, 30, 60)
+        val checkedItem = values.indexOf(currentInterval).takeIf { it >= 0 } ?: 0
+
+        AlertDialog.Builder(this)
+            .setTitle("Sync Settings")
+            .setSingleChoiceItems(options, checkedItem) { dialog, which ->
+                val newInterval = values[which]
+                prefs.edit().putInt("sync_interval_mins", newInterval).apply()
+                
+                // Restart service to apply settings
+                val serviceIntent = Intent(this, SyncService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun showNewChatDialog() {
