@@ -1,11 +1,13 @@
 package com.simonproyt.legacysignal
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -106,6 +108,10 @@ class HomeActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: android.view.MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_theme -> {
+                showThemeDialog()
+                true
+            }
             R.id.action_settings -> {
                 showSyncSettingsDialog()
                 true
@@ -114,8 +120,32 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    private fun showThemeDialog() {
+        val prefs = getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)
+        val currentMode = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        
+        val options = arrayOf("System Default", "Light", "Dark")
+        val values = intArrayOf(
+            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,
+            AppCompatDelegate.MODE_NIGHT_NO,
+            AppCompatDelegate.MODE_NIGHT_YES
+        )
+        val checkedItem = values.indexOf(currentMode).takeIf { it >= 0 } ?: 0
+
+        AlertDialog.Builder(this)
+            .setTitle("Theme")
+            .setSingleChoiceItems(options, checkedItem) { dialog, which ->
+                val newMode = values[which]
+                prefs.edit().putInt("theme_mode", newMode).apply()
+                AppCompatDelegate.setDefaultNightMode(newMode)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun showSyncSettingsDialog() {
-        val prefs = getSharedPreferences("SignalPrefs", android.content.Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)
         val currentInterval = prefs.getInt("sync_interval_mins", 0)
         
         val options = arrayOf("Persistent Connection (High Battery)", "Poll every 15 minutes", "Poll every 30 minutes", "Poll every 1 hour")

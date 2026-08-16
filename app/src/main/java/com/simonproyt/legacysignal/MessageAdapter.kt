@@ -54,8 +54,9 @@ class MessageAdapter(
         } else {
             holder.llRoot.gravity = Gravity.START
             holder.llBubble.setBackgroundResource(R.drawable.bg_bubble_incoming)
-            holder.tvMessage.setTextColor(Color.BLACK)
-            holder.tvTime.setTextColor(Color.parseColor("#8E8E93"))
+            val context = holder.itemView.context
+            holder.tvMessage.setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.signal_bubble_incoming_text))
+            holder.tvTime.setTextColor(androidx.core.content.ContextCompat.getColor(context, R.color.signal_bubble_incoming_time))
             holder.tvSender.visibility = View.GONE
         }
 

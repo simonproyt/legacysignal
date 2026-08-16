@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="signal_blue">#2C6BED</color>
+    <color name="signal_blue_dark">#1B4EB8</color>
+    <color name="signal_blue_light">#1A243B</color>
+    
+    <!-- Dynamic theme tokens (Dark) -->
+    <color name="signal_bg">#121212</color>
+    <color name="signal_card_bg">#1E1E1E</color>
+    <color name="signal_text_primary">#FFFFFF</color>
+    <color name="signal_text_secondary">#A0A0A5</color>
+    <color name="signal_bubble_incoming">#2C2C2E</color>
+    <color name="signal_bubble_incoming_text">#FFFFFF</color>
+    <color name="signal_bubble_incoming_time">#A0A0A5</color>
+    <color name="signal_input_bg">#1E1E1E</color>
+    <color name="signal_input_border">#3A3A3C</color>
+    <color name="signal_profile_card_bg">#1A243B</color>
+    <color name="signal_profile_card_border">#2C3A5E</color>
+    <color name="signal_empty_heading">#DDDDDD</color>
+    <color name="signal_empty_sub">#AAAAAA</color>
+    <color name="signal_list_bg">#1E1E1E</color>
+    
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

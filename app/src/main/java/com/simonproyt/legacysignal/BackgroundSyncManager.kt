@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.simonproyt.legacysignal.api.ConnectionState
 
@@ -56,6 +57,28 @@ object BackgroundSyncManager {
             }
         }
         
+        // Automatically fetch missing avatars for existing contacts in background
+        scope.launch {
+            try {
+                db.getAllThreads().collectLatest { threads ->
+                    for (thread in threads) {
+                        val avatarPath = db.getContactAvatar(thread.recipientNumber)
+                        val b64Key = db.getContactProfileKey(thread.recipientNumber)
+                        if (avatarPath.isNullOrBlank() && !b64Key.isNullOrBlank()) {
+                            try {
+                                val keyBytes = android.util.Base64.decode(b64Key, android.util.Base64.NO_WRAP)
+                                fetchAndSaveProfile(thread.recipientNumber, keyBytes)
+                            } catch (e: Exception) {
+                                Log.e("BackgroundSyncManager", "Error refreshing profile for ${thread.recipientNumber}", e)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+        
         client?.onMessageReceived = { envelope ->
             scope.launch {
                 try {
@@ -65,62 +88,9 @@ object BackgroundSyncManager {
                     
                     if (decrypted.profileKey != null) {
                         val currentName = db.getContactName(senderId)
-                        val b64Key = android.util.Base64.encodeToString(decrypted.profileKey, android.util.Base64.NO_WRAP)
-                        if (currentName.isNullOrEmpty()) {
-                            Log.i("BackgroundSyncManager", "Profile key found for new contact $senderId, fetching profile...")
-                            db.saveContact(senderId, null, null, b64Key)
-                            try {
-                                val phone = com.simonproyt.legacysignal.CredentialsManager.getPhoneNumber(context) ?: ""
-                                val pass = com.simonproyt.legacysignal.CredentialsManager.getPassword(context) ?: ""
-                                val profileAuth = android.util.Base64.encodeToString(("$phone:$pass").toByteArray(), android.util.Base64.NO_WRAP)
-                                
-                                val profileKeyObj = org.signal.libsignal.zkgroup.profiles.ProfileKey(decrypted.profileKey)
-                                val aciObj = org.signal.libsignal.protocol.ServiceId.Aci.parseFromString(senderId)
-                                val versionStr = profileKeyObj.getProfileKeyVersion(aciObj).serialize()
-
-                                val response = client!!.api.getProfile("Basic $profileAuth", senderId, versionStr).execute()
-                                if (response.isSuccessful && response.body() != null) {
-                                    val jsonString = response.body()!!.string()
-                                    Log.i("BackgroundSyncManager", "Successfully fetched profile JSON for $senderId: $jsonString")
-                                    val profileData = org.json.JSONObject(jsonString)
-                                    var decryptedName: String? = null
-                                    var decryptedAbout: String? = null
-
-                                    try {
-                                        val profileCipher = com.simonproyt.legacysignal.api.crypto.ProfileCipher(org.signal.libsignal.zkgroup.profiles.ProfileKey(decrypted.profileKey))
-
-                                        if (profileData.has("name") && !profileData.isNull("name")) {
-                                            val encName = android.util.Base64.decode(profileData.getString("name"), android.util.Base64.DEFAULT)
-                                            decryptedName = String(profileCipher.decrypt(encName))
-                                            Log.i("BackgroundSyncManager", "Decrypted name: $decryptedName")
-                                        } else {
-                                            decryptedName = "" // Mark as fetched but no name to prevent infinite fetch loop
-                                        }
-
-                                        if (profileData.has("about") && !profileData.isNull("about")) {
-                                            val encAbout = android.util.Base64.decode(profileData.getString("about"), android.util.Base64.DEFAULT)
-                                            decryptedAbout = String(profileCipher.decrypt(encAbout))
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("BackgroundSyncManager", "Failed to decrypt profile fields: ${e.message}", e)
-                                        decryptedName = "" // Prevent retry loop on decrypt failure too
-                                    }
-
-                                    db.saveContact(senderId, decryptedName, decryptedAbout, b64Key)
-                                    if (!decryptedName.isNullOrBlank()) {
-                                        val thread = db.getThreadByRecipient(senderId)
-                                        if (thread != null) {
-                                            db.updateThread(thread.copy(name = decryptedName))
-                                        }
-                                    }
-                                } else {
-                                    Log.e("BackgroundSyncManager", "Failed to fetch profile. Code: ${response.code()} Body: ${response.errorBody()?.string()}")
-                                }
-                            } catch (e: Exception) {
-                                Log.e("BackgroundSyncManager", "Failed to fetch/decrypt profile for $senderId", e)
-                            }
-                        } else {
-                            Log.i("BackgroundSyncManager", "Profile key found but contact $senderId already exists")
+                        val currentAvatar = db.getContactAvatar(senderId)
+                        if (currentName.isNullOrEmpty() || currentAvatar.isNullOrEmpty()) {
+                            fetchAndSaveProfile(senderId, decrypted.profileKey)
                         }
                     }
 
@@ -154,11 +124,11 @@ object BackgroundSyncManager {
         client?.connect()
         isRunning = true
     }
-            
+
     fun getClient(): SignalClient? {
         return client
     }
-
+                 
     fun stop() {
         if (!isRunning) return
         Log.i("BackgroundSyncManager", "Stopping background sync")
@@ -168,6 +138,113 @@ object BackgroundSyncManager {
         _connectionState.value = ConnectionState.DISCONNECTED
         val interval = appContext?.getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)?.getInt("sync_interval_mins", 0) ?: 0
         _statusText.value = if (interval > 0) "🕒 Polling (${interval}m)" else "● Offline"
+    }
+
+    fun fetchAndSaveProfile(senderId: String, profileKey: ByteArray) {
+        val ctx = appContext ?: return
+        val cli = client ?: return
+        val db = DatabaseHelper.getInstance(ctx)
+
+        scope.launch {
+            try {
+                val b64Key = android.util.Base64.encodeToString(profileKey, android.util.Base64.NO_WRAP)
+                val phone = CredentialsManager.getPhoneNumber(ctx) ?: ""
+                val pass = CredentialsManager.getPassword(ctx) ?: ""
+                val profileAuth = android.util.Base64.encodeToString(("$phone:$pass").toByteArray(), android.util.Base64.NO_WRAP)
+
+                val profileKeyObj = org.signal.libsignal.zkgroup.profiles.ProfileKey(profileKey)
+                val aciObj = org.signal.libsignal.protocol.ServiceId.Aci.parseFromString(senderId)
+                val versionStr = profileKeyObj.getProfileKeyVersion(aciObj).serialize()
+
+                Log.i("BackgroundSyncManager", "Fetching profile for $senderId with version $versionStr")
+                val response = cli.api.getProfile("Basic $profileAuth", senderId, versionStr).execute()
+                if (response.isSuccessful && response.body() != null) {
+                    val jsonString = response.body()!!.string()
+                    Log.i("BackgroundSyncManager", "Profile JSON for $senderId: $jsonString")
+                    val profileData = org.json.JSONObject(jsonString)
+                    val profileCipher = com.simonproyt.legacysignal.api.crypto.ProfileCipher(profileKeyObj)
+
+                    var decryptedName: String? = null
+                    var decryptedAbout: String? = null
+
+                    if (profileData.has("name") && !profileData.isNull("name")) {
+                        try {
+                            val encName = android.util.Base64.decode(profileData.getString("name"), android.util.Base64.DEFAULT)
+                            decryptedName = String(profileCipher.decrypt(encName))
+                            Log.i("BackgroundSyncManager", "Decrypted name: $decryptedName")
+                        } catch (e: Exception) {
+                            Log.e("BackgroundSyncManager", "Failed to decrypt name", e)
+                        }
+                    }
+
+                    if (profileData.has("about") && !profileData.isNull("about")) {
+                        try {
+                            val encAbout = android.util.Base64.decode(profileData.getString("about"), android.util.Base64.DEFAULT)
+                            decryptedAbout = String(profileCipher.decrypt(encAbout))
+                        } catch (e: Exception) {
+                            Log.e("BackgroundSyncManager", "Failed to decrypt about", e)
+                        }
+                    }
+
+                    db.saveContact(senderId, decryptedName, decryptedAbout, b64Key)
+                    if (!decryptedName.isNullOrBlank()) {
+                        val thread = db.getThreadByRecipient(senderId)
+                        if (thread != null) {
+                            db.updateThread(thread.copy(name = decryptedName))
+                        }
+                    }
+
+                    if (profileData.has("avatar") && !profileData.isNull("avatar")) {
+                        val avatarUrlRel = profileData.getString("avatar")
+                        Log.i("BackgroundSyncManager", "Avatar path found: $avatarUrlRel")
+                        if (avatarUrlRel.isNotBlank()) {
+                            val urlsToTry = mutableListOf<String>()
+                            if (avatarUrlRel.startsWith("http")) {
+                                urlsToTry.add(avatarUrlRel)
+                            } else {
+                                if (avatarUrlRel.startsWith("/")) {
+                                    urlsToTry.add("https://chat.signal.org$avatarUrlRel")
+                                } else {
+                                    urlsToTry.add("https://chat.signal.org/v1/profile/$avatarUrlRel")
+                                    urlsToTry.add("https://chat.signal.org/$avatarUrlRel")
+                                    urlsToTry.add("https://cdn.signal.org/$avatarUrlRel")
+                                    urlsToTry.add("https://chat.signal.org/v1/profile/avatar/$avatarUrlRel")
+                                    urlsToTry.add("https://chat.signal.org/v1/profile/$senderId/avatar/$avatarUrlRel")
+                                }
+                            }
+
+                            for (url in urlsToTry) {
+                                try {
+                                    Log.i("BackgroundSyncManager", "Trying avatar download from: $url")
+                                    val avatarResp = cli.api.downloadAvatar("Basic $profileAuth", url).execute()
+                                    Log.i("BackgroundSyncManager", "Avatar download code: ${avatarResp.code()}")
+                                    if (avatarResp.isSuccessful && avatarResp.body() != null) {
+                                        val encBytes = avatarResp.body()!!.bytes()
+                                        Log.i("BackgroundSyncManager", "Downloaded ${encBytes.size} enc avatar bytes")
+                                        val decBytes = profileCipher.decrypt(encBytes)
+                                        Log.i("BackgroundSyncManager", "Decrypted ${decBytes.size} avatar bytes")
+
+                                        val avatarDir = java.io.File(ctx.filesDir, "avatars")
+                                        if (!avatarDir.exists()) avatarDir.mkdirs()
+                                        val avatarFile = java.io.File(avatarDir, "${senderId}.png")
+                                        java.io.FileOutputStream(avatarFile).use { it.write(decBytes) }
+                                        db.saveContactAvatar(senderId, avatarFile.absolutePath)
+                                        Log.i("BackgroundSyncManager", "Successfully saved avatar to: ${avatarFile.absolutePath}")
+                                        break
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("BackgroundSyncManager", "Avatar download failed for $url: ${e.message}")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Log.e("BackgroundSyncManager", "Profile request failed: ${response.code()} ${response.errorBody()?.string()}")
+                }
+            } catch (e: Exception) {
+                Log.e("BackgroundSyncManager", "fetchAndSaveProfile failed for $senderId", e)
+            }
+        }
     }
 
     private fun showNotification(context: Context, senderName: String, messageText: String, threadId: Long, recipientId: String) {

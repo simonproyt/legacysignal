@@ -49,7 +49,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 uuid TEXT PRIMARY KEY,
                 name TEXT,
                 about TEXT,
-                profile_key TEXT
+                profile_key TEXT,
+                avatar_path TEXT
             )
             """.trimIndent()
         )
@@ -60,14 +61,22 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         if (oldVersion < 2) {
             db.execSQL(
                 """
-                CREATE TABLE $TABLE_CONTACTS (
+                CREATE TABLE IF NOT EXISTS $TABLE_CONTACTS (
                     uuid TEXT PRIMARY KEY,
                     name TEXT,
                     about TEXT,
-                    profile_key TEXT
+                    profile_key TEXT,
+                    avatar_path TEXT
                 )
                 """.trimIndent()
             )
+        }
+        if (oldVersion < 3) {
+            try {
+                db.execSQL("ALTER TABLE $TABLE_CONTACTS ADD COLUMN avatar_path TEXT")
+            } catch (e: Exception) {
+                // Already added
+            }
         }
     }
 
@@ -225,15 +234,29 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         notifyDbChanged()
     }
     
-    fun saveContact(uuid: String, name: String?, about: String?, profileKey: String?) {
+    fun saveContact(uuid: String, name: String?, about: String?, profileKey: String?, avatarPath: String? = null) {
         val db = writableDatabase
         val values = ContentValues().apply {
             put("uuid", uuid)
             if (name != null) put("name", name)
             if (about != null) put("about", about)
             if (profileKey != null) put("profile_key", profileKey)
+            if (avatarPath != null) put("avatar_path", avatarPath)
         }
         db.insertWithOnConflict(TABLE_CONTACTS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+    
+    fun saveContactAvatar(uuid: String, avatarPath: String) {
+        val db = writableDatabase
+        val values = ContentValues().apply {
+            put("avatar_path", avatarPath)
+        }
+        val rows = db.update(TABLE_CONTACTS, values, "uuid = ?", arrayOf(uuid))
+        if (rows == 0) {
+            values.put("uuid", uuid)
+            db.insert(TABLE_CONTACTS, null, values)
+        }
+        notifyDbChanged()
     }
     
     fun getContactName(uuid: String): String? {
@@ -247,9 +270,31 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         return name
     }
 
+    fun getContactAvatar(uuid: String): String? {
+        val db = readableDatabase
+        val cursor = db.query(TABLE_CONTACTS, arrayOf("avatar_path"), "uuid = ?", arrayOf(uuid), null, null, null)
+        var path: String? = null
+        if (cursor.moveToFirst()) {
+            path = cursor.getString(0)
+        }
+        cursor.close()
+        return path
+    }
+
+    fun getContactProfileKey(uuid: String): String? {
+        val db = readableDatabase
+        val cursor = db.query(TABLE_CONTACTS, arrayOf("profile_key"), "uuid = ?", arrayOf(uuid), null, null, null)
+        var key: String? = null
+        if (cursor.moveToFirst()) {
+            key = cursor.getString(0)
+        }
+        cursor.close()
+        return key
+    }
+
     companion object {
         private const val DATABASE_NAME = "signal_db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
 
         private const val TABLE_THREADS = "threads"
         private const val TABLE_MESSAGES = "messages"

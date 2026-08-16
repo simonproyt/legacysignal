@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Legacysignal" parent="Theme.AppCompat.Light.DarkActionBar">
-        <!-- Customize your theme here. -->
+    <style name="Theme.Legacysignal" parent="Theme.AppCompat.DayNight.DarkActionBar">
+        <item name="colorPrimary">@color/signal_blue</item>
+        <item name="colorPrimaryDark">@color/signal_blue_dark</item>
+        <item name="colorAccent">@color/signal_blue</item>
+        <item name="android:windowBackground">@color/signal_bg</item>
     </style>
 </resources>

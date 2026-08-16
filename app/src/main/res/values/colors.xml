@@ -1,10 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <color name="signal_blue">#2C6BED</color>
+    <color name="signal_blue_dark">#1B4EB8</color>
+    <color name="signal_blue_light">#F0F4FF</color>
+    
+    <!-- Dynamic theme tokens (Light) -->
+    <color name="signal_bg">#F4F5F7</color>
+    <color name="signal_card_bg">#FFFFFF</color>
+    <color name="signal_text_primary">#1C1C1E</color>
+    <color name="signal_text_secondary">#8E8E93</color>
+    <color name="signal_bubble_incoming">#E9E9EB</color>
+    <color name="signal_bubble_incoming_text">#000000</color>
+    <color name="signal_bubble_incoming_time">#8E8E93</color>
+    <color name="signal_input_bg">#FFFFFF</color>
+    <color name="signal_input_border">#E0E0E0</color>
+    <color name="signal_profile_card_bg">#F0F4FF</color>
+    <color name="signal_profile_card_border">#D6E4FF</color>
+    <color name="signal_empty_heading">#555555</color>
+    <color name="signal_empty_sub">#888888</color>
+    <color name="signal_list_bg">#FFFFFF</color>
+    
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>
