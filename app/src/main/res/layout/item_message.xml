@@ -14,8 +14,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingLeft="12dp"
-        android:paddingRight="12dp"
+        android:paddingLeft="10dp"
+        android:paddingRight="10dp"
         android:paddingTop="7dp"
         android:paddingBottom="7dp"
         android:background="@drawable/bg_bubble_incoming">
@@ -28,6 +28,17 @@
             android:textSize="11sp"
             android:textColor="#555555"
             android:layout_marginBottom="2dp"
+            android:visibility="gone" />
+
+        <ImageView
+            android:id="@+id/ivImage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="220dp"
+            android:maxHeight="300dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:layout_marginBottom="4dp"
             android:visibility="gone" />
 
         <TextView

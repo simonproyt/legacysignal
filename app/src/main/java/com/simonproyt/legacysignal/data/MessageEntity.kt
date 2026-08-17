@@ -6,5 +6,6 @@ data class MessageEntity(
     val senderId: String,
     val body: String,
     val timestamp: Long,
-    val isOutgoing: Boolean
+    val isOutgoing: Boolean,
+    val imagePath: String? = null
 )

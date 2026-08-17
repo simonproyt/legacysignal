@@ -101,7 +101,8 @@ class ChatActivity : AppCompatActivity() {
                             sender = if (msg.isOutgoing) "Me" else displayName,
                             text = msg.body,
                             timestamp = msg.timestamp,
-                            isOutgoing = msg.isOutgoing
+                            isOutgoing = msg.isOutgoing,
+                            imagePath = msg.imagePath
                         )
                     )
                 }

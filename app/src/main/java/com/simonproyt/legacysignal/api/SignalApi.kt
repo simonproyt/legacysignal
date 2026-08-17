@@ -211,6 +211,11 @@ interface SignalApi {
         @retrofit2.http.Url url: String
     ): Call<okhttp3.ResponseBody>
 
+    @GET
+    fun downloadAttachment(
+        @retrofit2.http.Url url: String
+    ): Call<okhttp3.ResponseBody>
+
     @PUT("/v1/messages/{destination}")
     fun sendMessage(
         @Header("Authorization") auth: String,

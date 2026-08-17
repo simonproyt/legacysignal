@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.simonproyt.legacysignal.api.ConnectionState
+import com.simonproyt.legacysignal.crypto.AttachmentCipher
 
 object BackgroundSyncManager {
     private var isRunning = false
@@ -22,13 +23,13 @@ object BackgroundSyncManager {
     private val scope = CoroutineScope(Dispatchers.IO)
     private var messageReceiver: MessageReceiver? = null
     private var appContext: Context? = null
-    
+
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
-    
+
     private val _statusText = MutableStateFlow("Offline")
     val statusText: StateFlow<String> = _statusText.asStateFlow()
-    
+
     fun start(context: Context) {
         val phone = CredentialsManager.getPhoneNumber(context) ?: return
         val pass = CredentialsManager.getPassword(context) ?: return
@@ -46,7 +47,7 @@ object BackgroundSyncManager {
         client = SignalClient(appContext!!, phone, pass)
         val db = DatabaseHelper.getInstance(appContext!!)
         messageReceiver = MessageReceiver(appContext!!)
-        
+
         client?.onStateChanged = { state ->
             _connectionState.value = state
             val interval = appContext?.getSharedPreferences("SignalPrefs", Context.MODE_PRIVATE)?.getInt("sync_interval_mins", 0) ?: 0
@@ -56,7 +57,7 @@ object BackgroundSyncManager {
                 ConnectionState.DISCONNECTED -> if (interval > 0) "🕒 Polling (${interval}m)" else "● Offline"
             }
         }
-        
+
         // Automatically fetch missing avatars for existing contacts in background
         scope.launch {
             try {
@@ -78,14 +79,14 @@ object BackgroundSyncManager {
                 // Ignore
             }
         }
-        
+
         client?.onMessageReceived = { envelope ->
             scope.launch {
                 try {
                     val decrypted = messageReceiver?.decryptMessage(envelope) ?: return@launch
                     val plaintext = decrypted.body
                     val senderId = decrypted.senderId
-                    
+
                     if (decrypted.profileKey != null) {
                         val currentName = db.getContactName(senderId)
                         val currentAvatar = db.getContactAvatar(senderId)
@@ -94,27 +95,121 @@ object BackgroundSyncManager {
                         }
                     }
 
-                    if (plaintext == "[No Body/Receipt]" || plaintext == "[Receipt]" || plaintext == "[No Data Message]") {
-                        Log.i("BackgroundSyncManager", "Skipping non-data message from $senderId")
-                        return@launch
+                    val attachments = decrypted.attachments
+                    var downloadedImagePath: String? = null
+
+                    if (attachments.isNotEmpty()) {
+                        Log.i("BackgroundSyncManager", "Processing ${attachments.size} attachments from $senderId")
+                        val phone = CredentialsManager.getPhoneNumber(context) ?: ""
+                        val pass = CredentialsManager.getPassword(context) ?: ""
+                        val authHeader = "Basic " + android.util.Base64.encodeToString(("$phone:$pass").toByteArray(), android.util.Base64.NO_WRAP)
+
+                        for (attachment in attachments) {
+                            val keyBytes = attachment.key?.toByteArray()
+                            Log.i("BackgroundSyncManager", "Attachment: key size=${keyBytes?.size}, cdnKey=${if (attachment.hasCdnKey()) attachment.cdnKey else "none"}, cdnId=${if (attachment.hasCdnId()) attachment.cdnId else "none"}, cdnNum=${if (attachment.hasCdnNumber()) attachment.cdnNumber else "none"}")
+
+                            if (keyBytes != null && keyBytes.isNotEmpty()) {
+                                val urlsToTry = mutableListOf<String>()
+                                val cdnNum = if (attachment.hasCdnNumber()) attachment.cdnNumber else 2
+
+                                if (attachment.hasCdnKey() && attachment.cdnKey.isNotBlank()) {
+                                    val key = attachment.cdnKey
+                                    urlsToTry.add("https://cdn${cdnNum}.signal.org/attachments/$key")
+                                    urlsToTry.add("https://cdn2.signal.org/attachments/$key")
+                                    urlsToTry.add("https://cdn.signal.org/attachments/$key")
+                                    urlsToTry.add("https://cdn3.signal.org/attachments/$key")
+                                    urlsToTry.add("https://cdn2.signal.org/$key")
+                                    urlsToTry.add("https://cdn.signal.org/$key")
+                                }
+                                if (attachment.hasCdnId()) {
+                                    val id = attachment.cdnId
+                                    urlsToTry.add("https://cdn${cdnNum}.signal.org/attachments/$id")
+                                    urlsToTry.add("https://cdn2.signal.org/attachments/$id")
+                                    urlsToTry.add("https://cdn.signal.org/attachments/$id")
+                                    urlsToTry.add("https://chat.signal.org/v1/attachments/$id")
+                                }
+
+                                for (url in urlsToTry) {
+                                    try {
+                                        Log.i("BackgroundSyncManager", "Attempting attachment download from: $url")
+                                        // Try unauthenticated first (standard for Signal CDN)
+                                        var response = client!!.api.downloadAttachment(url).execute()
+                                        if (!response.isSuccessful || response.body() == null) {
+                                            // Fallback to authenticated
+                                            response = client!!.api.downloadAvatar(authHeader, url).execute()
+                                        }
+
+                                        if (response.isSuccessful && response.body() != null) {
+                                            val encBytes = response.body()!!.bytes()
+                                            Log.i("BackgroundSyncManager", "Downloaded ${encBytes.size} bytes from $url, decrypting...")
+                                            val decBytes = AttachmentCipher.decrypt(encBytes, keyBytes)
+                                            Log.i("BackgroundSyncManager", "Decrypted ${decBytes.size} bytes successfully!")
+
+                                            val attachDir = java.io.File(appContext!!.filesDir, "attachments")
+                                            if (!attachDir.exists()) attachDir.mkdirs()
+                                            val filename = "${java.util.UUID.randomUUID()}.jpg"
+                                            val attachFile = java.io.File(attachDir, filename)
+                                            attachFile.writeBytes(decBytes)
+                                            downloadedImagePath = attachFile.absolutePath
+                                            Log.i("BackgroundSyncManager", "Saved decrypted attachment to: $downloadedImagePath")
+                                            break
+                                        } else {
+                                            Log.w("BackgroundSyncManager", "Download failed from $url with code ${response.code()}")
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("BackgroundSyncManager", "Error downloading/decrypting from $url: ${e.message}")
+                                    }
+                                }
+                                if (downloadedImagePath != null) break
+                            }
+                        }
                     }
+
+                    if (plaintext == "[No Body/Receipt]" || plaintext == "[Receipt]" || plaintext == "[No Data Message]") {
+                        if (downloadedImagePath == null) {
+                            Log.i("BackgroundSyncManager", "Skipping non-data message from $senderId")
+                            return@launch
+                        }
+                    }
+
+                    val messageSnippet = if (downloadedImagePath != null) {
+                        if (plaintext != "[Attachment]" && plaintext != "[No Body/Receipt]" && plaintext.isNotBlank()) {
+                            "📷 $plaintext"
+                        } else {
+                            "📷 Photo"
+                        }
+                    } else {
+                        plaintext
+                    }
+
                     val contactName = db.getContactName(senderId)
-                    
+
                     var senderThread = db.getThreadByRecipient(senderId)
                     if (senderThread == null) {
-                        db.insertThread(ThreadEntity(recipientNumber = senderId, name = contactName, lastMessageSnippet = plaintext, timestamp = System.currentTimeMillis()))
+                        db.insertThread(ThreadEntity(recipientNumber = senderId, name = contactName, lastMessageSnippet = messageSnippet, timestamp = System.currentTimeMillis()))
                         senderThread = db.getThreadByRecipient(senderId)
                     } else {
                         senderThread.name = contactName
-                        senderThread.lastMessageSnippet = plaintext
+                        senderThread.lastMessageSnippet = messageSnippet
                         senderThread.timestamp = System.currentTimeMillis()
                         db.updateThread(senderThread)
                     }
-                    db.insertMessage(MessageEntity(threadId = senderThread!!.id, senderId = senderId, body = plaintext, isOutgoing = false, timestamp = System.currentTimeMillis()))
-                    Log.i("BackgroundSyncManager", "Saved message from $senderId")
-                    
+
+                    val messageBody = if (plaintext == "[Attachment]" || plaintext == "[No Body/Receipt]") "" else plaintext
+                    db.insertMessage(
+                        MessageEntity(
+                            threadId = senderThread!!.id,
+                            senderId = senderId,
+                            body = messageBody,
+                            isOutgoing = false,
+                            timestamp = System.currentTimeMillis(),
+                            imagePath = downloadedImagePath
+                        )
+                    )
+                    Log.i("BackgroundSyncManager", "Saved message from $senderId (imagePath: $downloadedImagePath)")
+
                     appContext?.let { ctx ->
-                        showNotification(ctx, contactName ?: "Unknown", plaintext, senderThread.id, senderId)
+                        showNotification(ctx, contactName ?: "Unknown", messageSnippet, senderThread.id, senderId)
                     }
                 } catch (e: Exception) {
                     Log.e("BackgroundSyncManager", "Failed to process message", e)
@@ -128,7 +223,7 @@ object BackgroundSyncManager {
     fun getClient(): SignalClient? {
         return client
     }
-                 
+
     fun stop() {
         if (!isRunning) return
         Log.i("BackgroundSyncManager", "Stopping background sync")

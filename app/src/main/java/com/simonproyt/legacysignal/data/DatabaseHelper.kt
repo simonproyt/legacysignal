@@ -38,6 +38,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                 timestamp INTEGER,
                 is_outgoing INTEGER,
                 status INTEGER,
+                image_path TEXT,
                 FOREIGN KEY(thread_id) REFERENCES $TABLE_THREADS(id)
             )
             """.trimIndent()
@@ -74,6 +75,13 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         if (oldVersion < 3) {
             try {
                 db.execSQL("ALTER TABLE $TABLE_CONTACTS ADD COLUMN avatar_path TEXT")
+            } catch (e: Exception) {
+                // Already added
+            }
+        }
+        if (oldVersion < 4) {
+            try {
+                db.execSQL("ALTER TABLE $TABLE_MESSAGES ADD COLUMN image_path TEXT")
             } catch (e: Exception) {
                 // Already added
             }
@@ -200,6 +208,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         val list = mutableListOf<MessageEntity>()
         readableDatabase.rawQuery("SELECT * FROM $TABLE_MESSAGES WHERE thread_id = ? ORDER BY timestamp ASC", arrayOf(threadId.toString())).use { cursor ->
             while (cursor.moveToNext()) {
+                val imagePathIndex = cursor.getColumnIndex("image_path")
+                val imagePath = if (imagePathIndex != -1 && !cursor.isNull(imagePathIndex)) cursor.getString(imagePathIndex) else null
                 list.add(
                     MessageEntity(
                         id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
@@ -207,7 +217,8 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
                         senderId = cursor.getString(cursor.getColumnIndexOrThrow("sender_id")),
                         body = cursor.getString(cursor.getColumnIndexOrThrow("text")),
                         timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("timestamp")),
-                        isOutgoing = cursor.getInt(cursor.getColumnIndexOrThrow("is_outgoing")) == 1
+                        isOutgoing = cursor.getInt(cursor.getColumnIndexOrThrow("is_outgoing")) == 1,
+                        imagePath = imagePath
                     )
                 )
             }
@@ -222,6 +233,9 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
             put("text", message.body)
             put("timestamp", message.timestamp)
             put("is_outgoing", if (message.isOutgoing) 1 else 0)
+            if (message.imagePath != null) {
+                put("image_path", message.imagePath)
+            }
         }
         val id = writableDatabase.insert(TABLE_MESSAGES, null, values)
         notifyDbChanged()
@@ -294,7 +308,7 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
 
     companion object {
         private const val DATABASE_NAME = "signal_db"
-        private const val DATABASE_VERSION = 3
+        private const val DATABASE_VERSION = 4
 
         private const val TABLE_THREADS = "threads"
         private const val TABLE_MESSAGES = "messages"

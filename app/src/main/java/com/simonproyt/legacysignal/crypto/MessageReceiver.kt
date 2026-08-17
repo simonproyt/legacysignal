@@ -29,7 +29,12 @@ class MessageReceiver(private val context: Context) {
         return null
     }
     
-    data class DecryptedMessage(val senderId: String, val body: String, val profileKey: ByteArray? = null)
+    data class DecryptedMessage(
+        val senderId: String,
+        val body: String,
+        val profileKey: ByteArray? = null,
+        val attachments: List<SignalServiceProtos.AttachmentPointer> = emptyList()
+    )
 
     fun decryptMessage(envelope: SignalServiceProtos.Envelope): DecryptedMessage {
         var senderId = getSourceUuid(envelope)
@@ -106,22 +111,30 @@ class MessageReceiver(private val context: Context) {
             }
 
             var profileKey: ByteArray? = null
+            var attachments: List<SignalServiceProtos.AttachmentPointer> = emptyList()
             if (content?.hasDataMessage() == true) {
-                if (content.dataMessage.hasProfileKey()) {
-                    val keyBytes = content.dataMessage.profileKey.toByteArray()
+                val dataMessage = content.dataMessage
+                if (dataMessage.hasProfileKey()) {
+                    val keyBytes = dataMessage.profileKey.toByteArray()
                     Log.i("MessageReceiver", "Parsed profile key from $senderId, size: ${keyBytes.size}")
                     if (keyBytes.size == 32) profileKey = keyBytes
                 } else {
                     Log.i("MessageReceiver", "No profile key found in DataMessage from $senderId")
                 }
-                
-                if (content.dataMessage.body.isNullOrEmpty()) {
-                    return DecryptedMessage(senderId, "[No Body/Receipt]", profileKey)
+
+                if (dataMessage.attachmentsCount > 0) {
+                    attachments = dataMessage.attachmentsList
+                    Log.i("MessageReceiver", "Parsed ${attachments.size} attachments from DataMessage from $senderId")
                 }
-                return DecryptedMessage(senderId, content.dataMessage.body, profileKey)
+                
+                if (dataMessage.body.isNullOrEmpty()) {
+                    val fallbackBody = if (attachments.isNotEmpty()) "[Attachment]" else "[No Body/Receipt]"
+                    return DecryptedMessage(senderId, fallbackBody, profileKey, attachments)
+                }
+                return DecryptedMessage(senderId, dataMessage.body, profileKey, attachments)
             }
             
-            return DecryptedMessage(senderId, "[No Data Message]", profileKey)
+            return DecryptedMessage(senderId, "[No Data Message]", profileKey, emptyList())
         } catch (e: Exception) {
             Log.e("MessageReceiver", "Failed to decrypt message", e)
             return DecryptedMessage(senderId ?: "Unknown", "[Decryption Failed]")
