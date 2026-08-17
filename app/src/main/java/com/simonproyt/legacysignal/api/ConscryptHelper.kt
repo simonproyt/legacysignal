@@ -48,10 +48,16 @@ object ConscryptHelper {
                 if (chain == null || chain.isEmpty()) throw CertificateException("Empty chain")
                 android.util.Log.d("ConscryptHelper", "checkServerTrusted called with chain size: ${chain.size}")
                 
-                // Signal's WebSocket server uses a custom PKI (Issuer: CN=Signal Messenger)
-                // Since we don't have their custom root CA, we must pin/trust it directly.
-                if (chain[0].issuerDN.name.contains("Signal Messenger")) {
-                    android.util.Log.d("ConscryptHelper", "Trusted custom Signal certificate")
+                // Signal's servers and CDNs use custom PKI or modern CAs (ISRG Root X1, Amazon, Cloudflare, DigiCert)
+                val issuer = chain[0].issuerDN.name
+                if (issuer.contains("Signal Messenger") ||
+                    issuer.contains("Let's Encrypt") ||
+                    issuer.contains("ISRG") ||
+                    issuer.contains("Cloudflare") ||
+                    issuer.contains("Amazon") ||
+                    issuer.contains("GTS") ||
+                    issuer.contains("DigiCert")) {
+                    android.util.Log.d("ConscryptHelper", "Trusted custom/CDN certificate with issuer: $issuer")
                     return
                 }
                 

@@ -8,8 +8,49 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
+data class EncryptedAttachment(
+    val key: ByteArray,
+    val ciphertext: ByteArray,
+    val digest: ByteArray
+)
+
 object AttachmentCipher {
     private const val TAG = "AttachmentCipher"
+
+    fun encrypt(rawBytes: ByteArray): EncryptedAttachment {
+        val random = java.security.SecureRandom()
+
+        // Generate combined 64-byte key directly: first 32 = AES key, last 32 = MAC key
+        val combinedKey = ByteArray(64).also { random.nextBytes(it) }
+        val aesKey = combinedKey.copyOfRange(0, 32)
+        val macKey = combinedKey.copyOfRange(32, 64)
+        val iv = ByteArray(16).also { random.nextBytes(it) }
+
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(aesKey, "AES"), IvParameterSpec(iv))
+        val encrypted = cipher.doFinal(rawBytes)
+
+        val hmac = Mac.getInstance("HmacSHA256")
+        hmac.init(SecretKeySpec(macKey, "HmacSHA256"))
+        hmac.update(iv)
+        hmac.update(encrypted)
+        val mac = hmac.doFinal()
+
+        // Combined ciphertext: IV (16) + AES-CBC ciphertext + HMAC (32)
+        val combinedCiphertext = ByteArray(16 + encrypted.size + 32)
+        System.arraycopy(iv, 0, combinedCiphertext, 0, 16)
+        System.arraycopy(encrypted, 0, combinedCiphertext, 16, encrypted.size)
+        System.arraycopy(mac, 0, combinedCiphertext, 16 + encrypted.size, 32)
+
+        // Digest is SHA-256 of the entire combined ciphertext (IV + encrypted + MAC)
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(combinedCiphertext)
+
+        return EncryptedAttachment(
+            key = combinedKey,  // 64-byte key: AES (32) + MAC (32)
+            ciphertext = combinedCiphertext,
+            digest = digest
+        )
+    }
 
     fun decrypt(encryptedBytes: ByteArray, keyBytes: ByteArray): ByteArray {
         if (encryptedBytes.isEmpty()) {

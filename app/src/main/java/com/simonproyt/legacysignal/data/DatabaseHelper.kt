@@ -242,8 +242,21 @@ class DatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME
         id
     }
 
-    suspend fun deleteMessage(id: Long) {
+    suspend fun deleteMessage(id: Long) = withContext(Dispatchers.IO) {
         val db = writableDatabase
+        try {
+            val cursor = db.query(TABLE_MESSAGES, arrayOf("image_path"), "id = ?", arrayOf(id.toString()), null, null, null)
+            if (cursor.moveToFirst()) {
+                val imgPath = cursor.getString(0)
+                if (!imgPath.isNullOrBlank()) {
+                    val file = java.io.File(imgPath)
+                    if (file.exists()) file.delete()
+                }
+            }
+            cursor.close()
+        } catch (e: Exception) {
+            // Ignore
+        }
         db.delete(TABLE_MESSAGES, "id = ?", arrayOf(id.toString()))
         notifyDbChanged()
     }

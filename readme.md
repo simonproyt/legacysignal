@@ -11,7 +11,7 @@
   - chat bubbles with timestamps that are stored in the sqlite db so they show up after a reopen or a crash
   - contact profile avatar display
   - light/dark theme support
-  - image receiving via chats (im working on adding sending too)
+  - image sending/receiving via chats
 - Whats not working:
   - group chats
   - chaning profile data from the initally registered state

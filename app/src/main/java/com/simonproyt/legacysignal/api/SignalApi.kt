@@ -216,6 +216,26 @@ interface SignalApi {
         @retrofit2.http.Url url: String
     ): Call<okhttp3.ResponseBody>
 
+    @GET("/v4/attachments/form/upload")
+    fun getAttachmentUploadFormV4(
+        @Header("Authorization") authHeader: String
+    ): Call<okhttp3.ResponseBody>
+
+    @GET("/v3/attachments/form/upload")
+    fun getAttachmentUploadFormV3(
+        @Header("Authorization") authHeader: String
+    ): Call<okhttp3.ResponseBody>
+
+    @GET("/v2/attachments/form/upload")
+    fun getAttachmentUploadFormV2(
+        @Header("Authorization") authHeader: String
+    ): Call<okhttp3.ResponseBody>
+
+    @GET("/v1/attachments/form/upload")
+    fun getAttachmentUploadForm(
+        @Header("Authorization") authHeader: String
+    ): Call<okhttp3.ResponseBody>
+
     @PUT("/v1/messages/{destination}")
     fun sendMessage(
         @Header("Authorization") auth: String,

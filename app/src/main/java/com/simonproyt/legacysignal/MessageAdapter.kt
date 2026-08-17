@@ -27,7 +27,8 @@ data class ChatMessage(
 
 class MessageAdapter(
     private val messages: MutableList<ChatMessage>,
-    private val onMessageLongClick: ((Long) -> Unit)? = null
+    private val onMessageLongClick: ((Long) -> Unit)? = null,
+    private val onImageClick: ((String) -> Unit)? = null
 ) : RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
 
     private val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
@@ -58,6 +59,13 @@ class MessageAdapter(
                 if (bitmap != null) {
                     holder.ivImage.setImageBitmap(bitmap)
                     holder.ivImage.visibility = View.VISIBLE
+                    holder.ivImage.setOnClickListener {
+                        onImageClick?.invoke(message.imagePath)
+                    }
+                    holder.ivImage.setOnLongClickListener {
+                        onMessageLongClick?.invoke(message.id)
+                        true
+                    }
                 } else {
                     holder.ivImage.visibility = View.GONE
                 }
@@ -89,6 +97,11 @@ class MessageAdapter(
             holder.tvMessage.setTextColor(ContextCompat.getColor(context, R.color.signal_bubble_incoming_text))
             holder.tvTime.setTextColor(ContextCompat.getColor(context, R.color.signal_bubble_incoming_time))
             holder.tvSender.visibility = View.GONE
+        }
+
+        holder.llBubble.setOnLongClickListener {
+            onMessageLongClick?.invoke(message.id)
+            true
         }
 
         holder.itemView.setOnLongClickListener {

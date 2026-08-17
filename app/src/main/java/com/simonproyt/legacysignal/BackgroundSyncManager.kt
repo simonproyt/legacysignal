@@ -3,6 +3,7 @@ package com.simonproyt.legacysignal
 import android.content.Context
 import android.util.Log
 import com.simonproyt.legacysignal.api.SignalClient
+import com.simonproyt.legacysignal.crypto.AttachmentCipher
 import com.simonproyt.legacysignal.crypto.MessageReceiver
 import com.simonproyt.legacysignal.data.DatabaseHelper
 import com.simonproyt.legacysignal.data.MessageEntity
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import com.simonproyt.legacysignal.api.ConnectionState
-import com.simonproyt.legacysignal.crypto.AttachmentCipher
 
 object BackgroundSyncManager {
     private var isRunning = false
@@ -100,9 +100,9 @@ object BackgroundSyncManager {
 
                     if (attachments.isNotEmpty()) {
                         Log.i("BackgroundSyncManager", "Processing ${attachments.size} attachments from $senderId")
-                        val phone = CredentialsManager.getPhoneNumber(context) ?: ""
-                        val pass = CredentialsManager.getPassword(context) ?: ""
-                        val authHeader = "Basic " + android.util.Base64.encodeToString(("$phone:$pass").toByteArray(), android.util.Base64.NO_WRAP)
+                        val phoneNum = CredentialsManager.getPhoneNumber(context) ?: ""
+                        val passKey = CredentialsManager.getPassword(context) ?: ""
+                        val authHeader = "Basic " + android.util.Base64.encodeToString(("$phoneNum:$passKey").toByteArray(), android.util.Base64.NO_WRAP)
 
                         for (attachment in attachments) {
                             val keyBytes = attachment.key?.toByteArray()
@@ -322,7 +322,7 @@ object BackgroundSyncManager {
                                         val avatarDir = java.io.File(ctx.filesDir, "avatars")
                                         if (!avatarDir.exists()) avatarDir.mkdirs()
                                         val avatarFile = java.io.File(avatarDir, "${senderId}.png")
-                                        java.io.FileOutputStream(avatarFile).use { it.write(decBytes) }
+                                        avatarFile.writeBytes(decBytes)
                                         db.saveContactAvatar(senderId, avatarFile.absolutePath)
                                         Log.i("BackgroundSyncManager", "Successfully saved avatar to: ${avatarFile.absolutePath}")
                                         break
