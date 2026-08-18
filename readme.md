@@ -11,11 +11,14 @@
   - chat bubbles with timestamps that are stored in the sqlite db so they show up after a reopen or a crash
   - contact profile avatar display
   - light/dark theme support
-  - image sending/receiving via chats
+  - image sending/receiving via chats and taking pictures via the
 - Whats not working:
   - group chats
   - chaning profile data from the initally registered state
   - voice/video calls
+  - polls
+  - deleting messages for everyone not just yourself
+  - stickers and gifs
 
 # Bugs
 

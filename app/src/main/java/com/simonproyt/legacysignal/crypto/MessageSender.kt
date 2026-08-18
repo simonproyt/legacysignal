@@ -398,9 +398,14 @@ class MessageSender(
             }
 
             // Step 2: Build AttachmentPointer
+            val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, options)
+            val imgWidth = options.outWidth
+            val imgHeight = options.outHeight
+
             // encrypted.key is now 64 bytes (AES key + MAC key) which is what Signal expects
-            Log.i("MessageSender", "Building AttachmentPointer: cdnKey=$cdnKey, cdnNumber=$cdnNumber, keySize=${encrypted.key.size}, digestSize=${encrypted.digest.size}, plaintextSize=${imageBytes.size}")
-            val pointer = com.simonproyt.legacysignal.api.push.SignalServiceProtos.AttachmentPointer.newBuilder()
+            Log.i("MessageSender", "Building AttachmentPointer: cdnKey=$cdnKey, cdnNumber=$cdnNumber, width=$imgWidth, height=$imgHeight, keySize=${encrypted.key.size}, digestSize=${encrypted.digest.size}, plaintextSize=${imageBytes.size}")
+            val pointerBuilder = com.simonproyt.legacysignal.api.push.SignalServiceProtos.AttachmentPointer.newBuilder()
                 .setCdnKey(cdnKey)
                 .setCdnNumber(cdnNumber)
                 .setKey(com.google.protobuf.ByteString.copyFrom(encrypted.key))
@@ -409,7 +414,13 @@ class MessageSender(
                 .setFileName("image.jpg")
                 .setSize(imageBytes.size)
                 .setUploadTimestamp(uploadTimestamp)
-                .build()
+
+            if (imgWidth > 0 && imgHeight > 0) {
+                pointerBuilder.setWidth(imgWidth)
+                pointerBuilder.setHeight(imgHeight)
+            }
+
+            val pointer = pointerBuilder.build()
 
             // Step 3: Build DataMessage and send
             var attempt = 0
