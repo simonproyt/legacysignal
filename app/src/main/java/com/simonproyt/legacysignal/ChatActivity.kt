@@ -50,8 +50,12 @@ class ChatActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        recipientId = intent.getStringExtra("RECIPIENT_ID") ?: ""
+        recipientId = intent.getStringExtra("RECIPIENT_ID") ?: savedInstanceState?.getString("RECIPIENT_ID") ?: ""
         threadId = intent.getLongExtra("THREAD_ID", 0)
+        if (threadId == 0L) {
+            threadId = savedInstanceState?.getLong("THREAD_ID", 0) ?: 0L
+        }
+        currentPhotoPath = savedInstanceState?.getString("CURRENT_PHOTO_PATH")
 
         // Read credentials from CredentialsManager
         val phone = CredentialsManager.getPhoneNumber(this) ?: ""
@@ -469,6 +473,13 @@ class ChatActivity : AppCompatActivity() {
                                 Toast.makeText(this@ChatActivity, "No photo data captured", Toast.LENGTH_SHORT).show()
                             }
                         }
+                        
+                        // Clean up temporary camera capture file
+                        if (currentPhotoPath != null) {
+                            val f = File(currentPhotoPath!!)
+                            if (f.exists()) f.delete()
+                            currentPhotoPath = null
+                        }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
                             Toast.makeText(this@ChatActivity, "Failed to capture photo: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -513,6 +524,13 @@ class ChatActivity : AppCompatActivity() {
         if (prefs.getInt("sync_interval_mins", 0) == 0) {
             BackgroundSyncManager.start(this)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("RECIPIENT_ID", recipientId)
+        outState.putLong("THREAD_ID", threadId)
+        outState.putString("CURRENT_PHOTO_PATH", currentPhotoPath)
     }
 
     companion object {
