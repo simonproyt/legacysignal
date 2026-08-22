@@ -3,6 +3,7 @@ package com.simonproyt.legacysignal
 import android.content.Context
 import android.util.Log
 import com.simonproyt.legacysignal.api.SignalClient
+import com.simonproyt.legacysignal.api.ConscryptHelper
 import com.simonproyt.legacysignal.crypto.AttachmentCipher
 import com.simonproyt.legacysignal.crypto.MessageReceiver
 import com.simonproyt.legacysignal.data.DatabaseHelper
@@ -83,6 +84,7 @@ object BackgroundSyncManager {
         client?.onMessageReceived = { envelope ->
             scope.launch {
                 try {
+                    val ctx = appContext ?: return@launch
                     val decrypted = messageReceiver?.decryptMessage(envelope) ?: return@launch
                     val plaintext = decrypted.body
                     val senderId = decrypted.senderId
@@ -100,9 +102,18 @@ object BackgroundSyncManager {
 
                     if (attachments.isNotEmpty()) {
                         Log.i("BackgroundSyncManager", "Processing ${attachments.size} attachments from $senderId")
-                        val phoneNum = CredentialsManager.getPhoneNumber(context) ?: ""
-                        val passKey = CredentialsManager.getPassword(context) ?: ""
+                        val phoneNum = CredentialsManager.getPhoneNumber(ctx) ?: ""
+                        val passKey = CredentialsManager.getPassword(ctx) ?: ""
                         val authHeader = "Basic " + android.util.Base64.encodeToString(("$phoneNum:$passKey").toByteArray(), android.util.Base64.NO_WRAP)
+
+                        // Build a dedicated OkHttp client with proper TLS for CDN downloads
+                        val cdnClientBuilder = okhttp3.OkHttpClient.Builder()
+                            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                            .retryOnConnectionFailure(true)
+                        ConscryptHelper.configureOkHttp(ctx, cdnClientBuilder)
+                        val cdnClient = cdnClientBuilder.build()
 
                         for (attachment in attachments) {
                             val keyBytes = attachment.key?.toByteArray()
@@ -132,11 +143,24 @@ object BackgroundSyncManager {
                                 for (url in urlsToTry) {
                                     try {
                                         Log.i("BackgroundSyncManager", "Attempting attachment download from: $url")
-                                        // Try unauthenticated first (standard for Signal CDN)
-                                        var response = client!!.api.downloadAttachment(url).execute()
+                                        // Use dedicated CDN client with proper TLS - try unauthenticated first
+                                        val request = okhttp3.Request.Builder()
+                                            .url(url)
+                                            .addHeader("User-Agent", "Signal-Android/8.20.1 Android/29")
+                                            .build()
+                                        var response = cdnClient.newCall(request).execute()
+                                        Log.i("BackgroundSyncManager", "CDN response: ${response.code()} for $url")
+
                                         if (!response.isSuccessful || response.body() == null) {
+                                            response.body()?.close()
                                             // Fallback to authenticated
-                                            response = client!!.api.downloadAvatar(authHeader, url).execute()
+                                            val authRequest = okhttp3.Request.Builder()
+                                                .url(url)
+                                                .addHeader("User-Agent", "Signal-Android/8.20.1 Android/29")
+                                                .addHeader("Authorization", authHeader)
+                                                .build()
+                                            response = cdnClient.newCall(authRequest).execute()
+                                            Log.i("BackgroundSyncManager", "CDN auth response: ${response.code()} for $url")
                                         }
 
                                         if (response.isSuccessful && response.body() != null) {
@@ -145,7 +169,7 @@ object BackgroundSyncManager {
                                             val decBytes = AttachmentCipher.decrypt(encBytes, keyBytes)
                                             Log.i("BackgroundSyncManager", "Decrypted ${decBytes.size} bytes successfully!")
 
-                                            val attachDir = java.io.File(appContext!!.filesDir, "attachments")
+                                            val attachDir = java.io.File(ctx.filesDir, "attachments")
                                             if (!attachDir.exists()) attachDir.mkdirs()
                                             val filename = "${java.util.UUID.randomUUID()}.jpg"
                                             val attachFile = java.io.File(attachDir, filename)
@@ -154,10 +178,11 @@ object BackgroundSyncManager {
                                             Log.i("BackgroundSyncManager", "Saved decrypted attachment to: $downloadedImagePath")
                                             break
                                         } else {
+                                            response.body()?.close()
                                             Log.w("BackgroundSyncManager", "Download failed from $url with code ${response.code()}")
                                         }
                                     } catch (e: Exception) {
-                                        Log.e("BackgroundSyncManager", "Error downloading/decrypting from $url: ${e.message}")
+                                        Log.e("BackgroundSyncManager", "Error downloading/decrypting from $url: ${e.message}", e)
                                     }
                                 }
                                 if (downloadedImagePath != null) break
@@ -172,6 +197,11 @@ object BackgroundSyncManager {
                         }
                     }
 
+                    // Also skip bare "[Attachment]" text if download failed - show error instead
+                    if (plaintext == "[Attachment]" && downloadedImagePath == null) {
+                        Log.w("BackgroundSyncManager", "Attachment download failed for message from $senderId, saving with error note")
+                    }
+
                     val messageSnippet = if (downloadedImagePath != null) {
                         if (plaintext != "[Attachment]" && plaintext != "[No Body/Receipt]" && plaintext.isNotBlank()) {
                             "📷 $plaintext"
@@ -179,7 +209,7 @@ object BackgroundSyncManager {
                             "📷 Photo"
                         }
                     } else {
-                        plaintext
+                        if (plaintext == "[Attachment]") "📷 Photo (downloading failed)" else plaintext
                     }
 
                     val contactName = db.getContactName(senderId)
@@ -208,8 +238,8 @@ object BackgroundSyncManager {
                     )
                     Log.i("BackgroundSyncManager", "Saved message from $senderId (imagePath: $downloadedImagePath)")
 
-                    appContext?.let { ctx ->
-                        showNotification(ctx, contactName ?: "Unknown", messageSnippet, senderThread.id, senderId)
+                    appContext?.let { notifCtx ->
+                        showNotification(notifCtx, contactName ?: "Unknown", messageSnippet, senderThread.id, senderId)
                     }
                 } catch (e: Exception) {
                     Log.e("BackgroundSyncManager", "Failed to process message", e)

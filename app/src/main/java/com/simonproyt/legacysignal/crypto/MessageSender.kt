@@ -30,20 +30,25 @@ class MessageSender(
         timestamp: Long = System.currentTimeMillis()
     ): Boolean = withContext(Dispatchers.IO) {
         try {
+            Log.i("MessageSender", "sendMessage START: dest=$destinationUuid, bodyLen=${messageBody.length}, ts=$timestamp")
             var attempt = 0
             while (attempt < 2) {
                 attempt++
+                Log.i("MessageSender", "sendMessage attempt $attempt for $destinationUuid")
                 
                 // Fetch prekeys to get all active devices if we don't have sessions, or if we are retrying
                 // To support multiple devices without caching, we'll just fetch prekeys on attempt 2 or if no primary session exists
-                val fetchPrekeys = attempt > 1 || !store.containsSession(SignalProtocolAddress(destinationUuid, 1))
+                val hasSession = store.containsSession(SignalProtocolAddress(destinationUuid, 1))
+                val fetchPrekeys = attempt > 1 || !hasSession
+                Log.i("MessageSender", "hasSession=$hasSession, fetchPrekeys=$fetchPrekeys")
                 
                 val preKeyResponse = if (fetchPrekeys) {
                     val response = api.getPreKeys(authHeader, destinationUuid).execute()
                     if (!response.isSuccessful || response.body() == null) {
-                        Log.e("MessageSender", "Failed to fetch prekeys for $destinationUuid: ${response.code()}")
+                        Log.e("MessageSender", "Failed to fetch prekeys for $destinationUuid: ${response.code()} ${response.errorBody()?.string()}")
                         return@withContext false
                     }
+                    Log.i("MessageSender", "Fetched prekeys: ${response.body()!!.devices.size} devices")
                     response.body()!!
                 } else null
 
@@ -61,23 +66,32 @@ class MessageSender(
                 var certBytes = store.getDeliveryCertificate()
                 if (certBytes != null) {
                     try {
-                        SenderCertificate(certBytes)
+                        val testCert = SenderCertificate(certBytes)
+                        // Check if certificate has expired
+                        if (testCert.expiration < System.currentTimeMillis()) {
+                            Log.w("MessageSender", "Cached delivery certificate expired at ${testCert.expiration}, clearing.")
+                            certBytes = null
+                        }
                     } catch (e: Exception) {
-                        Log.w("MessageSender", "Cached delivery certificate is invalid, clearing cache.")
+                        Log.w("MessageSender", "Cached delivery certificate is invalid, clearing cache: ${e.message}")
                         certBytes = null
                     }
                 }
 
                 if (certBytes == null) {
+                    Log.i("MessageSender", "Fetching fresh delivery certificate...")
                     val certResponse = api.getDeliveryCertificate(authHeader).execute()
                     if (certResponse.isSuccessful) {
                         val certB64 = certResponse.body()?.certificate
                         if (certB64 != null) {
                             certBytes = Base64.decode(certB64, Base64.NO_WRAP)
                             store.saveDeliveryCertificate(certBytes!!)
+                            Log.i("MessageSender", "Fresh delivery certificate fetched and saved (${certBytes!!.size} bytes)")
+                        } else {
+                            Log.w("MessageSender", "Delivery certificate response body had null certificate field")
                         }
                     } else {
-                        Log.w("MessageSender", "Failed to fetch delivery certificate: ${certResponse.code()}")
+                        Log.w("MessageSender", "Failed to fetch delivery certificate: ${certResponse.code()} ${certResponse.errorBody()?.string()}")
                     }
                 }
 
@@ -85,10 +99,11 @@ class MessageSender(
                     try {
                         SenderCertificate(it)
                     } catch (e: Exception) {
-                        Log.e("MessageSender", "Invalid certificate", e)
+                        Log.e("MessageSender", "Invalid certificate after fetch", e)
                         null
                     }
                 }
+                Log.i("MessageSender", "SenderCertificate: ${if (senderCertificate != null) "valid, expires=${senderCertificate.expiration}" else "null (will use non-sealed session)"}")
                 
                 for (deviceId in activeDeviceIds) {
                     val address = SignalProtocolAddress(destinationUuid, deviceId)
@@ -184,10 +199,11 @@ class MessageSender(
                 }
 
                 if (pushMessages.isEmpty()) {
-                    Log.e("MessageSender", "No devices to send to!")
+                    Log.e("MessageSender", "No devices to send to! activeDeviceIds=$activeDeviceIds")
                     return@withContext false
                 }
 
+                Log.i("MessageSender", "Sending ${pushMessages.size} push messages to $destinationUuid (types: ${pushMessages.map { it.type }})")
                 val pushList = OutgoingPushMessageList(
                     destination = destinationUuid,
                     timestamp = timestamp,
@@ -197,6 +213,7 @@ class MessageSender(
                 )
 
                 val response = api.sendMessage(authHeader, destinationUuid, false, pushList).execute()
+                Log.i("MessageSender", "Send API response: ${response.code()}")
                 if (response.isSuccessful) {
                     Log.d("MessageSender", "Message sent successfully to $destinationUuid")
                     return@withContext true

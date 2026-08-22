@@ -171,21 +171,47 @@ class ChatActivity : AppCompatActivity() {
                 
                 lifecycleScope.launch(Dispatchers.IO) {
                     try {
-                        val sender = messageSender ?: return@launch
-                        sender.sendMessage(recipientId, text)
+                        val sender = messageSender ?: run {
+                            Log.e("ChatActivity", "messageSender is null!")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@ChatActivity, "Not connected - cannot send", Toast.LENGTH_SHORT).show()
+                            }
+                            return@launch
+                        }
+                        Log.i("ChatActivity", "Sending message to $recipientId: ${text.take(50)}...")
+                        val success = sender.sendMessage(recipientId, text)
                         
-                        val time = System.currentTimeMillis()
-                        db.updateSnippet(threadId, text, time)
-                        db.insertMessage(
-                            MessageEntity(
-                                threadId = threadId,
-                                senderId = phone,
-                                body = text,
-                                timestamp = time,
-                                isOutgoing = true
+                        if (success) {
+                            val time = System.currentTimeMillis()
+                            db.updateSnippet(threadId, text, time)
+                            db.insertMessage(
+                                MessageEntity(
+                                    threadId = threadId,
+                                    senderId = phone,
+                                    body = text,
+                                    timestamp = time,
+                                    isOutgoing = true
+                                )
                             )
-                        )
+                            Log.i("ChatActivity", "Message sent and saved successfully")
+                        } else {
+                            Log.e("ChatActivity", "sendMessage returned false for $recipientId")
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(this@ChatActivity, "Failed to send message", Toast.LENGTH_SHORT).show()
+                                messageAdapter.addMessage(
+                                    ChatMessage(
+                                        id = -1L,
+                                        sender = "System",
+                                        text = "⚠️ Failed to send: \"${text.take(50)}\"",
+                                        timestamp = System.currentTimeMillis(),
+                                        isOutgoing = false
+                                    )
+                                )
+                                rvMessages.scrollToPosition(messagesList.size - 1)
+                            }
+                        }
                     } catch (e: Exception) {
+                        Log.e("ChatActivity", "Exception sending message", e)
                         withContext(Dispatchers.Main) {
                             messageAdapter.addMessage(
                                 ChatMessage(
