@@ -3,7 +3,7 @@ name: Android Build
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build:
@@ -83,9 +83,9 @@ jobs:
         with:
           name: legacysignal-release
           path: app/build/outputs/apk/release/app-release-unsigned.apk
-      
+
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
